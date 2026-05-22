@@ -515,13 +515,20 @@ function render() {
 }
 
 function navItem(page, icon, label) {
-  const active = state.page === page || (page==='new' && state.page==='edit') ? 'active' : '';
-  const badge = page === 'aankomst' && Object.keys(state.activeRides).length > 0
-    ? '<span style="position:absolute;top:2px;right:8px;background:var(--red);color:#fff;border-radius:50%;width:14px;height:14px;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:700">' + Object.keys(state.activeRides).length + '</span>'
+  var active = (state.page === page || (page==='new' && state.page==='edit')) ? 'active' : '';
+  var cnt = Object.keys(state.activeRides).length;
+  var badge = (page === 'aankomst' && cnt > 0)
+    ? '<span style="position:absolute;top:2px;right:8px;background:#C0392B;color:#fff;border-radius:50%;width:14px;height:14px;font-size:9px;display:flex;align-items:center;justify-content:center">' + cnt + '</span>'
     : '';
-  return '<button class="nav-item ' + active + '" onclick="navigate_to('' + page + '')" style="position:relative">' + badge + icon + '<br><span style="font-size:10px">' + label + '</span></button>';
+  var onclick = "navigate_to('" + page + "')";
+  return '<button class="nav-item ' + active + '" onclick="' + onclick + '" style="position:relative">' + badge + icon + '<br><span style="font-size:10px">' + label + '</span></button>';
 }
 window.navigate_to = page => navigate(page, page==='new'?{form:defaultForm(),editId:null}:{});
+window.go_Dashboard = function() { navigate_to('dashboard'); };
+window.go_Trips     = function() { navigate_to('trips'); };
+window.go_Aankomst  = function() { navigate_to('aankomst'); };
+window.go_New       = function() { navigate_to('new'); };
+window.go_Rijden    = function() { navigate_to('rijden'); };
 
 function renderHeader() {
   const pending = JSON.parse(localStorage.getItem('pending_trips')||'[]').length;
@@ -567,7 +574,7 @@ function renderRijden() {
     + '<div class="form-group"><label>Vertrektijd</label><input type="time" id="rij-time" value="' + timeNow + '" style="font-size:14px"/></div>'
     + '<button class="btn btn-primary btn-full" style="font-size:16px;padding:16px;margin-top:8px" onclick="startRit()">🚗 Vertrekken</button>'
     + '</div></div></div>'
-    + '<button class="btn btn-secondary btn-full" onclick="navigate_to('dashboard')" style="margin-top:8px">Annuleren</button>';
+    + '<button class="btn btn-secondary btn-full" onclick="goDashboard()" style="margin-top:8px">Annuleren</button>';
 }
 
 function renderAankomst() {
@@ -580,7 +587,7 @@ function renderAankomst() {
     return '<div class="page-header"><div class="page-title">📍 Aangekomen</div></div>'
       + '<div class="card"><div class="card-body"><div class="empty"><div class="empty-icon">🚗</div>'
       + '<p>Geen actieve ritten.<br>Druk eerst op "Ga rijden".</p></div></div></div>'
-      + '<button class="btn btn-secondary btn-full" onclick="navigate_to('dashboard')" style="margin-top:8px">Terug</button>';
+      + '<button class="btn btn-secondary btn-full" onclick="go_Dashboard()"" style="margin-top:8px">Terug</button>';
   }
 
   var v = actief[0];
@@ -599,7 +606,7 @@ function renderAankomst() {
     + '<div class="form-group"><label>Opmerkingen</label><textarea id="aankomst-notes" rows="2" style="font-size:14px"></textarea></div>'
     + '<button class="btn btn-primary btn-full" style="font-size:16px;padding:16px;margin-top:8px" onclick="stopRit()">📍 Aankomst bevestigen & opslaan</button>'
     + '</div></div>'
-    + '<button class="btn btn-secondary btn-full" onclick="navigate_to('dashboard')" style="margin-top:8px">Annuleren</button>';
+    + '<button class="btn btn-secondary btn-full" onclick="go_Dashboard()"" style="margin-top:8px">Annuleren</button>';
 }
 
 window.updateRijdenInfo = function(vehicleId) {
@@ -732,7 +739,7 @@ function renderDashboard() {
     <div class="page-sub">${monthName}</div></div>
     <div style="display:flex;gap:6px">
       <button class="btn btn-secondary btn-sm" onclick="doExport()">CSV</button>
-      <button class="btn btn-primary btn-sm" onclick="navigate_to('new')">+ Rit</button>
+      <button class="btn btn-primary btn-sm" onclick="go_New()"">+ Rit</button>
     </div>
   </div>
 
@@ -743,7 +750,7 @@ function renderDashboard() {
     <div class="stat-card"><div class="stat-label">Open</div><div class="stat-value" style="color:${open>0?'#856404':'#166534'}">${open}</div><div class="stat-sub">te controleren</div></div>
   </div>
 
-  ${Object.keys(state.activeRides).length > 0 ? '<div class="card" style="border-left:4px solid var(--red);margin-bottom:12px"><div class="card-header" style="background:#fdf2f2;color:#721c24">🚗 Onderweg (' + Object.keys(state.activeRides).length + ')</div>' + Object.entries(state.activeRides).map(function(e){var vid=e[0],ride=e[1];var v=state.vehicles.find(function(x){return x.id===vid;});return '<div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between"><div><p style="font-weight:600">' + (v?v.license:'?') + ' · ' + (ride.user_name||'') + '</p><p style="font-size:12px;color:#888">Van: ' + (ride.start_address||'?') + ' · ' + (ride.start_km||'') + ' km</p></div><button class="btn btn-primary btn-sm" onclick="navigate_to('aankomst')">📍 Aankomst</button></div>';}).join('') + '</div>' : ''}
+  ${Object.keys(state.activeRides).length > 0 ? '<div class="card" style="border-left:4px solid var(--red);margin-bottom:12px"><div class="card-header" style="background:#fdf2f2;color:#721c24">🚗 Onderweg (' + Object.keys(state.activeRides).length + ')</div>' + Object.entries(state.activeRides).map(function(e){var vid=e[0],ride=e[1];var v=state.vehicles.find(function(x){return x.id===vid;});return '<div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between"><div><p style="font-weight:600">' + (v?v.license:'?') + ' · ' + (ride.user_name||'') + '</p><p style="font-size:12px;color:#888">Van: ' + (ride.start_address||'?') + ' · ' + (ride.start_km||'') + ' km</p></div><button class="btn btn-primary btn-sm" onclick="go_Aankomst()"">📍 Aankomst</button></div>';}).join('') + '</div>' : ''}
 
   ${isAdmin() && openTrips.length > 0 ? `
   <div class="card" style="border-left:3px solid #fbbf24;margin-bottom:12px">
@@ -773,7 +780,7 @@ function renderDashboard() {
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #f0f0f0">
       <span style="font-weight:600;font-size:13px;color:#555;text-transform:uppercase;letter-spacing:.05em">Recente ritten</span>
-      <button class="btn btn-ghost btn-sm" onclick="navigate_to('trips')">Alle →</button>
+      <button class="btn btn-ghost btn-sm" onclick="go_Trips()"">Alle →</button>
     </div>
     ${state.trips.slice(0,5).map(t => tripRow(t)).join('')}
     ${state.trips.length === 0 ? '<div class="empty"><div class="empty-icon">🚗</div><p>Nog geen ritten</p></div>' : ''}
@@ -811,7 +818,7 @@ function renderTrips() {
     <div><div class="page-title">Ritten</div><div class="page-sub">${trips.length} ritten · ${total} km</div></div>
     <div style="display:flex;gap:6px">
       <button class="btn btn-secondary btn-sm" onclick="doExport()">CSV</button>
-      <button class="btn btn-primary btn-sm" onclick="navigate_to('new')">+ Rit</button>
+      <button class="btn btn-primary btn-sm" onclick="go_New()"">+ Rit</button>
     </div>
   </div>
 
@@ -1004,7 +1011,7 @@ function renderForm() {
     <button class="btn btn-primary btn-full" onclick="doSave()" ${state.saving?'disabled':''}>
       ${state.saving ? 'Opslaan…' : (state.editId ? 'Wijzigingen opslaan' : 'Rit opslaan')}
     </button>
-    <button class="btn btn-secondary" onclick="navigate_to('trips')">Annuleren</button>
+    <button class="btn btn-secondary" onclick="go_Trips()"">Annuleren</button>
   </div>
   ${!state.editId ? `
   <div style="margin-top:8px">
@@ -1139,7 +1146,7 @@ function renderDetail() {
     </table>
   </div>
   ${t.signature_data ? `<div class="card"><div class="card-header">Handtekening</div><div class="card-body"><img src="${t.signature_data}" style="max-height:80px;border:1px solid #e0e0e0;border-radius:6px"></div></div>` : ''}
-  <button class="btn btn-secondary btn-full" onclick="navigate_to('trips')">← Terug</button>`;
+  <button class="btn btn-secondary btn-full" onclick="go_Trips()"">← Terug</button>`;
 }
 
 // ── Admin ────────────────────────────────────────────────────────────────────
