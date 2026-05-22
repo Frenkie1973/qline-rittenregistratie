@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<meta name="theme-color" content="#C0392B"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-title" content="Q-Line Ritten"/>
+<title>Q-Line Rittenregistratie</title>
+<link rel="manifest" id="pwa-manifest"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f5f5;color:#1a1a1a}
+:root{--red:#C0392B;--red-dark:#922B21;--black:#1a1a1a;--white:#fff;--gray:#f0f0f0;--border:#ddd}
+
+/* Layout */
+#app{min-height:100vh;display:flex;flex-direction:column}
+header{background:var(--black);color:var(--white);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.logo{display:flex;align-items:center;gap:8px}
+.logo-bar{width:4px;height:24px;background:var(--red);border-radius:2px}
+.logo-text{font-weight:700;font-size:14px;letter-spacing:.1em}
+.user-info{font-size:12px;color:#aaa;display:flex;align-items:center;gap:8px}
+.badge-admin{background:var(--red);color:var(--white);padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600}
+main{flex:1;max-width:680px;margin:0 auto;width:100%;padding:16px;padding-bottom:80px}
+nav-bottom{position:fixed;bottom:0;left:0;right:0;background:var(--white);border-top:1px solid var(--border);display:flex;z-index:100}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;padding:8px 4px 10px;cursor:pointer;color:#888;font-size:11px;transition:.2s;border:none;background:none}
+.nav-item.active{color:var(--red);font-weight:600}
+.nav-icon{font-size:22px;line-height:1;margin-bottom:2px}
+
+/* Cards */
+.card{background:var(--white);border-radius:12px;border:1px solid var(--border);margin-bottom:12px;overflow:hidden}
+.card-body{padding:16px}
+.card-header{padding:12px 16px;background:#f8f8f8;border-bottom:1px solid var(--border);font-weight:600;font-size:13px;color:#555;text-transform:uppercase;letter-spacing:.05em}
+
+/* Forms */
+.form-group{margin-bottom:14px}
+label{display:block;font-size:13px;font-weight:500;color:#555;margin-bottom:5px}
+input,select,textarea{width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:8px;font-size:15px;font-family:inherit;background:var(--white);color:var(--black);transition:.2s;-webkit-appearance:none}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px rgba(192,57,43,.1)}
+textarea{resize:vertical;min-height:80px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.km-display{background:#f8f8f8;border:1px solid var(--border);border-radius:8px;padding:11px 12px;text-align:center}
+.km-display span{font-size:22px;font-weight:700;color:var(--red)}
+.km-display small{display:block;font-size:11px;color:#888;margin-top:2px}
+.km-display.error span{color:#e74c3c}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px 20px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;border:none;transition:.2s;font-family:inherit;white-space:nowrap}
+.btn-primary{background:var(--red);color:var(--white)}
+.btn-primary:hover{background:var(--red-dark)}
+.btn-secondary{background:var(--gray);color:var(--black)}
+.btn-secondary:hover{background:#e0e0e0}
+.btn-success{background:#27ae60;color:var(--white)}
+.btn-danger{background:#e74c3c;color:var(--white)}
+.btn-ghost{background:none;color:#666;padding:8px 12px}
+.btn-sm{padding:6px 12px;font-size:13px}
+.btn-full{width:100%}
+.btn-group{display:flex;gap:8px}
+
+/* Badges */
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600}
+.badge-open{background:#fef3cd;color:#856404}
+.badge-goedgekeurd{background:#d1e7dd;color:#0a3622}
+.badge-afgekeurd{background:#f8d7da;color:#721c24}
+.badge-zakelijk{background:#cfe2ff;color:#084298}
+.badge-prive{background:#e8d5f5;color:#4a1a6e}
+
+/* Stats */
+.stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px}
+@media(min-width:480px){.stats-grid{grid-template-columns:repeat(4,1fr)}}
+.stat-card{background:var(--white);border-radius:10px;border:1px solid var(--border);padding:12px 14px}
+.stat-label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.05em;font-weight:500}
+.stat-value{font-size:22px;font-weight:700;margin-top:3px;color:var(--black)}
+.stat-sub{font-size:11px;color:#aaa;margin-top:2px}
+
+/* Trip list item */
+.trip-item{padding:14px 16px;cursor:pointer;border-bottom:1px solid #f0f0f0;transition:.15s}
+.trip-item:last-child{border-bottom:none}
+.trip-item:hover{background:#fafafa}
+.trip-row{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.trip-date{font-weight:600;font-size:14px}
+.trip-plate{font-size:12px;color:#888;font-family:monospace}
+.trip-route{font-size:13px;color:#555;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+.trip-purpose{font-size:12px;color:#aaa;margin-top:1px;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trip-km{font-size:20px;font-weight:700;color:var(--red);text-align:right}
+.trip-actions{display:flex;gap:4px;margin-top:6px;justify-content:flex-end}
+
+/* Alerts */
+.alert{padding:12px 16px;border-radius:8px;font-size:14px;margin-bottom:12px}
+.alert-error{background:#fdf2f2;border:1px solid #f5c6cb;color:#721c24}
+.alert-success{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
+.alert-info{background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af}
+.alert-warn{background:#fefce8;border:1px solid #fde68a;color:#854d0e}
+
+/* Login */
+.login-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:#f5f5f5}
+.login-logo{background:var(--black);border-radius:16px;padding:28px 36px;text-align:center;margin-bottom:24px;width:100%;max-width:360px}
+.login-logo .bar{width:4px;height:32px;background:var(--red);border-radius:2px;display:inline-block;vertical-align:middle;margin-right:8px}
+.login-logo .name{color:var(--white);font-size:20px;font-weight:700;letter-spacing:.15em;vertical-align:middle}
+.login-logo p{color:#888;font-size:11px;margin-top:8px;letter-spacing:.05em}
+.login-card{background:var(--white);border-radius:16px;padding:24px;width:100%;max-width:360px;box-shadow:0 4px 24px rgba(0,0,0,.08)}
+
+/* Signature */
+#sig-canvas{border:1px solid var(--border);border-radius:8px;touch-action:none;cursor:crosshair;width:100%;height:120px;background:#fff}
+
+/* Section header */
+.section-title{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;margin-top:4px}
+
+/* Progress bars */
+.bar-wrap{margin-bottom:10px}
+.bar-label{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
+.bar-track{height:6px;background:#f0f0f0;border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;background:var(--red);border-radius:3px;transition:.5s}
+.bar-fill.alt{background:var(--black)}
+
+/* Tab bar */
+.tab-bar{display:flex;background:#f0f0f0;border-radius:10px;padding:3px;margin-bottom:16px}
+.tab-btn{flex:1;padding:8px;border:none;background:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;transition:.2s;font-family:inherit}
+.tab-btn.active{background:var(--white);box-shadow:0 1px 4px rgba(0,0,0,.1);color:var(--black);font-weight:600}
+.tab-btn:not(.active){color:#888}
+
+/* Spinner */
+.spinner{display:flex;justify-content:center;padding:48px 0}
+.spinner-ring{width:36px;height:36px;border:3px solid #e0e0e0;border-top-color:var(--red);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Page header */
+.page-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;gap:8px}
+.page-title{font-size:20px;font-weight:700;color:var(--black)}
+.page-sub{font-size:13px;color:#888;margin-top:2px}
+
+/* Empty state */
+.empty{text-align:center;padding:48px 16px;color:#aaa}
+.empty-icon{font-size:48px;margin-bottom:12px}
+
+/* Collapsible */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;border-bottom:1px solid #f0f0f0}
+.toggle-row:hover{background:#fafafa}
+
+/* Detail table */
+.detail-table{width:100%;border-collapse:collapse}
+.detail-table tr:nth-child(even){background:#f8f8f8}
+.detail-table td{padding:10px 16px;font-size:14px;border-bottom:1px solid #f5f5f5}
+.detail-table td:first-child{font-weight:500;color:#666;width:42%;white-space:nowrap}
+
+/* Online indicator */
+.online-dot{width:8px;height:8px;border-radius:50%;background:#27ae60;display:inline-block;margin-right:4px}
+.offline-dot{width:8px;height:8px;border-radius:50%;background:#e74c3c;display:inline-block;margin-right:4px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js';
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js';
+import { getFirestore, collection, addDoc, getDocs, getDoc, doc, updateDoc, query, where, orderBy, serverTimestamp, Timestamp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
+
+// ── Firebase config ──────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyAk4Xus-k0ZTCIMLuh9QMslsg-I21uMoDQ",
+  authDomain: "qline-ritten.firebaseapp.com",
+  projectId: "qline-ritten",
+  storageBucket: "qline-ritten.firebasestorage.app",
+  messagingSenderId: "999415794642",
+  appId: "1:999415794642:web:15512fc2e367df42ccd60b",
+  measurementId: "G-DTCS0HZT38"
+};
+
+const fbApp  = initializeApp(firebaseConfig);
+const auth   = getAuth(fbApp);
+const db     = getFirestore(fbApp);
+
+// ── State ────────────────────────────────────────────────────────────────────
+let state = {
+  user: null, profile: null,
+  page: 'dashboard', prevPage: null,
+  trips: [], vehicles: [], users: [],
+  loading: true, saving: false,
+  editId: null,
+  filterFrom: '', filterTo: '', filterType: '', filterStatus: '', filterSearch: '',
+  adminTab: 'vehicles',
+  msg: null, msgType: 'success',
+  sigDrawing: false, sigCtx: null, sigLast: null,
+  form: defaultForm(),
+  detailTrip: null,
+};
+
+function defaultForm() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  return {
+    trip_date: `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`,
+    departure_time:'', arrival_time:'',
+    vehicle_id:'', odometer_start:'', odometer_end:'',
+    departure_address:'', arrival_address:'',
+    purpose:'', trip_type:'Zakelijk',
+    detour: false, detour_reason:'', private_km:'0', notes:''
+  };
+}
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+onAuthStateChanged(auth, async u => {
+  state.user = u;
+  if (u) {
+    const snap = await getDoc(doc(db,'users',u.uid));
+    if (!snap.exists()) {
+      await setDoc(doc(db,'users',u.uid),{email:u.email,full_name:u.displayName||u.email,role:'medewerker',created_at:serverTimestamp()});
+      state.profile = {email:u.email,full_name:u.email,role:'medewerker'};
+    } else {
+      state.profile = snap.data();
+    }
+    await loadVehicles();
+    await loadTrips();
+  }
+  state.loading = false;
+  render();
+});
+
+// ── Data loaders ─────────────────────────────────────────────────────────────
+async function loadTrips() {
+  let q;
+  if (state.profile?.role === 'admin') {
+    q = query(collection(db,'trips'), orderBy('trip_date','desc'));
+  } else {
+    q = query(collection(db,'trips'), where('user_id','==',state.user.uid), orderBy('trip_date','desc'));
+  }
+  const snap = await getDocs(q);
+  state.trips = snap.docs.map(d => ({id:d.id,...d.data()}));
+}
+
+async function loadVehicles() {
+  const snap = await getDocs(query(collection(db,'vehicles'), orderBy('license')));
+  state.vehicles = snap.docs.map(d => ({id:d.id,...d.data()})).filter(v => v.active !== false);
+}
+
+async function loadUsers() {
+  const snap = await getDocs(collection(db,'users'));
+  state.users = snap.docs.map(d => ({id:d.id,...d.data()}));
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function isAdmin() { return state.profile?.role === 'admin'; }
+function totalKm(t) {
+  const s = parseInt(t.odometer_start), e = parseInt(t.odometer_end);
+  return (!isNaN(s) && !isNaN(e)) ? e - s : null;
+}
+function fmtKm(n) { return n !== null ? `${n} km` : '—'; }
+function flash(msg, type='success') {
+  state.msg = msg; state.msgType = type;
+  setTimeout(() => { state.msg = null; render(); }, 3500);
+  render();
+}
+function navigate(page, extra={}) {
+  state.prevPage = state.page;
+  state.page = page;
+  Object.assign(state, extra);
+  window.scrollTo(0,0);
+  render();
+}
+
+// ── Signature canvas ─────────────────────────────────────────────────────────
+function initSig() {
+  setTimeout(() => {
+    const c = document.getElementById('sig-canvas');
+    if (!c) return;
+    const ctx = c.getContext('2d');
+    c.width = c.offsetWidth; c.height = 120;
+    ctx.strokeStyle = '#222'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    state.sigCtx = ctx;
+
+    const getPos = e => {
+      const r = c.getBoundingClientRect();
+      const src = e.touches ? e.touches[0] : e;
+      return [src.clientX - r.left, src.clientY - r.top];
+    };
+    c.onmousedown = c.ontouchstart = e => {
+      e.preventDefault(); state.sigDrawing = true;
+      state.sigLast = getPos(e);
+    };
+    c.onmousemove = c.ontouchmove = e => {
+      e.preventDefault();
+      if (!state.sigDrawing) return;
+      const [x,y] = getPos(e);
+      ctx.beginPath(); ctx.moveTo(...state.sigLast); ctx.lineTo(x,y); ctx.stroke();
+      state.sigLast = [x,y];
+    };
+    c.onmouseup = c.onmouseleave = c.ontouchend = () => { state.sigDrawing = false; };
+  }, 100);
+}
+function clearSig() {
+  const c = document.getElementById('sig-canvas');
+  if (c && state.sigCtx) state.sigCtx.clearRect(0,0,c.width,c.height);
+}
+function getSigDataUrl() {
+  const c = document.getElementById('sig-canvas');
+  return c ? c.toDataURL() : null;
+}
+
+// ── CRUD ─────────────────────────────────────────────────────────────────────
+async function saveTrip() {
+  const f = state.form;
+  const errors = [];
+  if (!f.trip_date)          errors.push('Datum verplicht');
+  if (!f.vehicle_id)         errors.push('Voertuig verplicht');
+  if (!f.odometer_start)     errors.push('Beginstand verplicht');
+  if (!f.odometer_end)       errors.push('Eindstand verplicht');
+  if (totalKm(f) !== null && totalKm(f) < 0) errors.push('Eindstand moet hoger zijn dan beginstand');
+  if (!f.departure_address)  errors.push('Vertrekadres verplicht');
+  if (!f.arrival_address)    errors.push('Aankomstadres verplicht');
+  if (!f.purpose)            errors.push('Doel verplicht');
+  if (errors.length) { flash(errors.join(' · '), 'error'); return; }
+
+  state.saving = true; render();
+
+  const sig = getSigDataUrl();
+  const vehicle = state.vehicles.find(v => v.id === f.vehicle_id);
+  const payload = {
+    ...f,
+    odometer_start: parseInt(f.odometer_start),
+    odometer_end:   parseInt(f.odometer_end),
+    km_total:       totalKm(f),
+    private_km:     parseInt(f.private_km)||0,
+    vehicle_license: vehicle?.license||'',
+    user_id:        state.user.uid,
+    user_name:      state.profile?.full_name||state.user.email,
+    signature_data: sig,
+    status:         'open',
+    created_at:     serverTimestamp(),
+  };
+
+  if (!navigator.onLine) {
+    // Offline: sla op in localStorage
+    const pending = JSON.parse(localStorage.getItem('pending_trips')||'[]');
+    pending.push({...payload, id:'local_'+Date.now(), created_at: new Date().toISOString()});
+    localStorage.setItem('pending_trips', JSON.stringify(pending));
+    state.saving = false;
+    state.form = defaultForm();
+    flash('Rit lokaal opgeslagen — synchroniseert bij internet', 'info');
+    navigate('trips');
+    return;
+  }
+
+  try {
+    if (state.editId) {
+      await updateDoc(doc(db,'trips',state.editId), {...payload, updated_at: serverTimestamp()});
+    } else {
+      await addDoc(collection(db,'trips'), payload);
+    }
+    await loadTrips();
+    state.saving = false;
+    state.editId = null;
+    state.form = defaultForm();
+    flash('Rit opgeslagen ✓');
+    navigate('trips');
+  } catch(e) {
+    state.saving = false;
+    flash('Fout: '+e.message, 'error');
+  }
+}
+
+async function approveTrip(id, status) {
+  await updateDoc(doc(db,'trips',id), {
+    status, approved_by: state.user.uid, approved_by_name: state.profile?.full_name,
+    approved_at: serverTimestamp()
+  });
+  await loadTrips();
+  flash(status === 'goedgekeurd' ? 'Rit goedgekeurd ✓' : 'Rit afgekeurd');
+}
+
+async function addVehicle(license, brand, model) {
+  if (!license) return;
+  await addDoc(collection(db,'vehicles'), {license,brand,model,active:true,created_at:serverTimestamp()});
+  await loadVehicles();
+  flash('Voertuig toegevoegd ✓');
+}
+
+async function syncPending() {
+  const pending = JSON.parse(localStorage.getItem('pending_trips')||'[]');
+  if (!pending.length || !navigator.onLine) return;
+  for (const t of pending) {
+    const {id, ...data} = t;
+    await addDoc(collection(db,'trips'), {...data, created_at: serverTimestamp()});
+  }
+  localStorage.removeItem('pending_trips');
+  await loadTrips();
+  flash(`${pending.length} offline rit(ten) gesynchroniseerd ✓`);
+}
+
+window.addEventListener('online', syncPending);
+setTimeout(syncPending, 2000);
+
+// ── Export ───────────────────────────────────────────────────────────────────
+function exportCSV(trips) {
+  const headers = ['Datum','Bestuurder','Kenteken','Beginstand','Eindstand','Totaal km','Van','Naar','Doel','Type','Afwijking','Reden','Privé km','Status'];
+  const rows = trips.map(t => [
+    t.trip_date||'', t.user_name||'', t.vehicle_license||'',
+    t.odometer_start||'', t.odometer_end||'', t.km_total||'',
+    t.departure_address||'', t.arrival_address||'', t.purpose||'',
+    t.trip_type||'', t.detour?'Ja':'Nee', t.detour_reason||'',
+    t.private_km||0, t.status||''
+  ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(';'));
+  const csv = '\uFEFF' + [headers.join(';'), ...rows].join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  const a = Object.assign(document.createElement('a'), {href:URL.createObjectURL(blob), download:`ritten_${new Date().toISOString().slice(0,10)}.csv`});
+  a.click();
+}
+
+function exportPDF(trip) {
+  const w = window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Rit ${trip.trip_date}</title>
+  <style>
+    body{font-family:Arial,sans-serif;font-size:12px;padding:20px;color:#222}
+    h1{font-size:16px;margin-bottom:4px}
+    .sub{color:#888;font-size:11px;margin-bottom:20px}
+    .header{background:#1a1a1a;color:white;padding:12px 16px;border-radius:6px;margin-bottom:20px}
+    .header h1{color:white;margin:0;font-size:18px}
+    .header .red{color:#C0392B;font-weight:700}
+    table{width:100%;border-collapse:collapse}
+    tr:nth-child(even){background:#f8f8f8}
+    td{padding:8px 12px;border-bottom:1px solid #eee}
+    td:first-child{font-weight:600;color:#555;width:40%}
+    .sig{border:1px solid #ccc;height:80px;margin-top:8px;border-radius:4px}
+    @media print{button{display:none}}
+  </style></head><body>
+  <div class="header"><h1>Q-LINE EQUESTRIAN B.V.</h1><p style="color:#aaa;font-size:11px;margin-top:4px">RITTENREGISTRATIE · PIONEERS IN EQUESTRIAN INNOVATION</p></div>
+  <button onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;background:#C0392B;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px">🖨️ Afdrukken</button>
+  <table>
+    <tr><td>Datum</td><td>${trip.trip_date||''}</td></tr>
+    <tr><td>Bestuurder</td><td>${trip.user_name||''}</td></tr>
+    <tr><td>Kenteken</td><td>${trip.vehicle_license||''}</td></tr>
+    <tr><td>Vertrektijd</td><td>${trip.departure_time||'-'}</td></tr>
+    <tr><td>Aankomsttijd</td><td>${trip.arrival_time||'-'}</td></tr>
+    <tr><td>Beginstand kilometer</td><td>${trip.odometer_start||''} km</td></tr>
+    <tr><td>Eindstand kilometer</td><td>${trip.odometer_end||''} km</td></tr>
+    <tr><td><strong>Totaal gereden</strong></td><td><strong>${trip.km_total||''} km</strong></td></tr>
+    <tr><td>Vertrekadres</td><td>${trip.departure_address||''}</td></tr>
+    <tr><td>Aankomstadres</td><td>${trip.arrival_address||''}</td></tr>
+    <tr><td>Doel / klant / project</td><td>${trip.purpose||''}</td></tr>
+    <tr><td>Type rit</td><td>${trip.trip_type||''}</td></tr>
+    <tr><td>Afwijkende route</td><td>${trip.detour?'Ja':'Nee'}</td></tr>
+    <tr><td>Reden afwijking</td><td>${trip.detour_reason||'-'}</td></tr>
+    <tr><td>Privé-omrijkilometers</td><td>${trip.private_km||0} km</td></tr>
+    <tr><td>Opmerkingen</td><td>${trip.notes||'-'}</td></tr>
+    <tr><td>Status</td><td>${trip.status||''}</td></tr>
+  </table>
+  ${trip.signature_data ? `<p style="margin-top:20px;font-weight:600">Handtekening bestuurder:</p><img src="${trip.signature_data}" style="border:1px solid #ccc;height:80px;display:block;margin-top:8px">` : ''}
+  <p style="margin-top:30px;color:#888;font-size:10px">Gegenereerd op ${new Date().toLocaleDateString('nl-NL')} · Q-Line Equestrian B.V. · q-line.com</p>
+  </body></html>`);
+  w.document.close();
+}
+
+// ── Render ───────────────────────────────────────────────────────────────────
+function render() {
+  const app = document.getElementById('app');
+  if (state.loading) { app.innerHTML = `<div class="spinner" style="height:100vh;align-items:center"><div class="spinner-ring"></div></div>`; return; }
+  if (!state.user)   { app.innerHTML = renderLogin(); bindLogin(); return; }
+
+  app.innerHTML = `
+    ${renderHeader()}
+    <main>${renderPage()}</main>
+    <nav style="position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #e0e0e0;display:flex;z-index:100">
+      ${navItem('dashboard','📊','Dashboard')}
+      ${navItem('new','➕','Nieuwe rit')}
+      ${navItem('trips','🚗','Ritten')}
+      ${isAdmin() ? navItem('admin','⚙️','Beheer') : ''}
+    </nav>
+  `;
+  bindEvents();
+  if (state.page === 'new' || state.page === 'edit') initSig();
+}
+
+function navItem(page, icon, label) {
+  const active = state.page === page || (page==='new' && state.page==='edit') ? 'active' : '';
+  return `<button class="nav-item ${active}" onclick="navigate_to('${page}')">${icon}<br><span style="font-size:10px">${label}</span></button>`;
+}
+window.navigate_to = page => navigate(page === 'new' ? 'new' : page, page==='new'?{form:defaultForm(),editId:null}:{});
+
+function renderHeader() {
+  const pending = JSON.parse(localStorage.getItem('pending_trips')||'[]').length;
+  const online = navigator.onLine;
+  return `<header>
+    <div class="logo"><div class="logo-bar"></div><span class="logo-text">Q-LINE RITTEN</span></div>
+    <div class="user-info">
+      <span style="color:${online?'#27ae60':'#e74c3c'}">${online?'●':'●'}</span>
+      ${pending ? `<span style="color:#f39c12">${pending} offline</span>` : ''}
+      <span>${state.profile?.full_name?.split(' ')[0]||''}</span>
+      ${isAdmin() ? '<span class="badge-admin">Admin</span>' : ''}
+      <button onclick="doSignOut()" style="color:#888;background:none;border:none;cursor:pointer;font-size:12px">Uit</button>
+    </div>
+  </header>`;
+}
+window.doSignOut = () => signOut(auth).then(() => render());
+
+function renderPage() {
+  let html = state.msg ? `<div class="alert alert-${state.msgType}">${state.msg}</div>` : '';
+  if (state.page === 'dashboard') html += renderDashboard();
+  else if (state.page === 'trips') html += renderTrips();
+  else if (state.page === 'new' || state.page === 'edit') html += renderForm();
+  else if (state.page === 'detail') html += renderDetail();
+  else if (state.page === 'admin') html += renderAdmin();
+  return html;
+}
+
+// ── Dashboard ────────────────────────────────────────────────────────────────
+function renderDashboard() {
+  const now = new Date();
+  const monthTrips = state.trips.filter(t => t.trip_date?.startsWith(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`));
+  const total   = monthTrips.reduce((s,t) => s+(t.km_total||0),0);
+  const zakelijk = monthTrips.filter(t=>t.trip_type==='Zakelijk').reduce((s,t)=>s+(t.km_total||0),0);
+  const prive    = monthTrips.filter(t=>t.trip_type==='Privé').reduce((s,t)=>s+(t.km_total||0),0);
+  const open     = monthTrips.filter(t=>t.status==='open').length;
+
+  const monthName = now.toLocaleDateString('nl-NL',{month:'long',year:'numeric'});
+
+  const perVehicle = {};
+  monthTrips.forEach(t => {
+    const k = t.vehicle_license||'Onbekend';
+    perVehicle[k] = (perVehicle[k]||0) + (t.km_total||0);
+  });
+  const pvArr = Object.entries(perVehicle).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  const openTrips = state.trips.filter(t=>t.status==='open').slice(0,5);
+
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Goedemorgen${state.profile?.full_name ? ', '+state.profile.full_name.split(' ')[0] : ''}</div>
+    <div class="page-sub">${monthName}</div></div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-secondary btn-sm" onclick="doExport()">CSV</button>
+      <button class="btn btn-primary btn-sm" onclick="navigate_to('new')">+ Rit</button>
+    </div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-label">Totaal km</div><div class="stat-value">${total}</div><div class="stat-sub">${monthTrips.length} ritten</div></div>
+    <div class="stat-card"><div class="stat-label">Zakelijk</div><div class="stat-value" style="color:#084298">${zakelijk}</div><div class="stat-sub">km</div></div>
+    <div class="stat-card"><div class="stat-label">Privé</div><div class="stat-value" style="color:#4a1a6e">${prive}</div><div class="stat-sub">km</div></div>
+    <div class="stat-card"><div class="stat-label">Open</div><div class="stat-value" style="color:${open>0?'#856404':'#166534'}">${open}</div><div class="stat-sub">te controleren</div></div>
+  </div>
+
+  ${isAdmin() && openTrips.length > 0 ? `
+  <div class="card" style="border-left:3px solid #fbbf24;margin-bottom:12px">
+    <div class="card-header" style="background:#fefce8;color:#854d0e">⏳ Openstaande ritten (${openTrips.length})</div>
+    ${openTrips.map(t => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid #fef3cd;font-size:13px">
+      <span>${t.trip_date} · ${t.user_name||''} · ${t.vehicle_license||''} · <strong>${t.km_total||0} km</strong></span>
+      <div style="display:flex;gap:4px">
+        <button class="btn btn-success btn-sm" onclick="approveT('${t.id}','goedgekeurd')">✓</button>
+        <button class="btn btn-danger btn-sm"  onclick="approveT('${t.id}','afgekeurd')">✗</button>
+      </div>
+    </div>`).join('')}
+  </div>` : ''}
+
+  ${pvArr.length > 0 ? `
+  <div class="card">
+    <div class="card-header">Per voertuig — ${monthName}</div>
+    <div class="card-body">
+      ${pvArr.map(([k,v]) => `
+      <div class="bar-wrap">
+        <div class="bar-label"><span>${k}</span><span>${v} km</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${total ? Math.round(v/total*100) : 0}%"></div></div>
+      </div>`).join('')}
+    </div>
+  </div>` : ''}
+
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #f0f0f0">
+      <span style="font-weight:600;font-size:13px;color:#555;text-transform:uppercase;letter-spacing:.05em">Recente ritten</span>
+      <button class="btn btn-ghost btn-sm" onclick="navigate_to('trips')">Alle →</button>
+    </div>
+    ${state.trips.slice(0,5).map(t => tripRow(t)).join('')}
+    ${state.trips.length === 0 ? '<div class="empty"><div class="empty-icon">🚗</div><p>Nog geen ritten</p></div>' : ''}
+  </div>`;
+}
+window.doExport = () => exportCSV(filteredTrips());
+window.approveT = (id,s) => approveTrip(id,s);
+
+// ── Trips ────────────────────────────────────────────────────────────────────
+function filteredTrips() {
+  return state.trips.filter(t => {
+    if (state.filterFrom && t.trip_date < state.filterFrom) return false;
+    if (state.filterTo   && t.trip_date > state.filterTo)   return false;
+    if (state.filterType && t.trip_type !== state.filterType) return false;
+    if (state.filterStatus && t.status !== state.filterStatus) return false;
+    if (state.filterSearch) {
+      const s = state.filterSearch.toLowerCase();
+      if (!(t.purpose||'').toLowerCase().includes(s) &&
+          !(t.departure_address||'').toLowerCase().includes(s) &&
+          !(t.arrival_address||'').toLowerCase().includes(s) &&
+          !(t.user_name||'').toLowerCase().includes(s)) return false;
+    }
+    return true;
+  });
+}
+
+function renderTrips() {
+  const trips = filteredTrips();
+  const total   = trips.reduce((s,t)=>s+(t.km_total||0),0);
+  const zakelijk = trips.filter(t=>t.trip_type==='Zakelijk').reduce((s,t)=>s+(t.km_total||0),0);
+  const open    = trips.filter(t=>t.status==='open').length;
+
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Ritten</div><div class="page-sub">${trips.length} ritten · ${total} km</div></div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-secondary btn-sm" onclick="doExport()">CSV</button>
+      <button class="btn btn-primary btn-sm" onclick="navigate_to('new')">+ Rit</button>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
+    <div class="stat-card" style="padding:10px"><div class="stat-label">Totaal</div><div style="font-size:18px;font-weight:700">${total} km</div></div>
+    <div class="stat-card" style="padding:10px"><div class="stat-label">Zakelijk</div><div style="font-size:18px;font-weight:700;color:#084298">${zakelijk} km</div></div>
+    <div class="stat-card" style="padding:10px"><div class="stat-label">Open</div><div style="font-size:18px;font-weight:700;color:${open>0?'#856404':'#166534'}">${open}</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px">
+    <div class="card-body" style="padding:12px">
+      <div class="form-row" style="margin-bottom:8px">
+        <input type="date" value="${state.filterFrom}" placeholder="Van" onchange="setFilter('filterFrom',this.value)" style="font-size:13px;padding:8px 10px"/>
+        <input type="date" value="${state.filterTo}"   placeholder="Tot" onchange="setFilter('filterTo',this.value)" style="font-size:13px;padding:8px 10px"/>
+      </div>
+      <div class="form-row" style="margin-bottom:8px">
+        <select onchange="setFilter('filterType',this.value)" style="font-size:13px;padding:8px 10px">
+          <option value="" ${!state.filterType?'selected':''}>Alle types</option>
+          <option value="Zakelijk" ${state.filterType==='Zakelijk'?'selected':''}>Zakelijk</option>
+          <option value="Privé" ${state.filterType==='Privé'?'selected':''}>Privé</option>
+        </select>
+        <select onchange="setFilter('filterStatus',this.value)" style="font-size:13px;padding:8px 10px">
+          <option value="" ${!state.filterStatus?'selected':''}>Alle statussen</option>
+          <option value="open" ${state.filterStatus==='open'?'selected':''}>Open</option>
+          <option value="goedgekeurd" ${state.filterStatus==='goedgekeurd'?'selected':''}>Goedgekeurd</option>
+          <option value="afgekeurd" ${state.filterStatus==='afgekeurd'?'selected':''}>Afgekeurd</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px">
+        <input type="text" placeholder="Zoeken…" value="${state.filterSearch}" oninput="setFilter('filterSearch',this.value)" style="font-size:13px;padding:8px 10px;flex:1"/>
+        <button class="btn btn-secondary btn-sm" onclick="resetFilter()">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    ${trips.length === 0 ? '<div class="empty"><div class="empty-icon">🔍</div><p>Geen ritten gevonden</p></div>' : trips.map(t => tripRow(t, true)).join('')}
+  </div>`;
+}
+window.setFilter = (k,v) => { state[k]=v; render(); };
+window.resetFilter = () => { state.filterFrom=state.filterTo=state.filterType=state.filterStatus=state.filterSearch=''; render(); };
+
+function tripRow(t, showEdit=false) {
+  const km = t.km_total ?? 0;
+  const badgeMap = {open:'badge-open',goedgekeurd:'badge-goedgekeurd',afgekeurd:'badge-afgekeurd'};
+  const typeBadge = t.trip_type==='Zakelijk'?'badge-zakelijk':'badge-prive';
+  return `<div class="trip-item" onclick="openDetail('${t.id}')">
+    <div class="trip-row">
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span class="trip-date">${t.trip_date||''}</span>
+          <span class="trip-plate">${t.vehicle_license||''}</span>
+          ${isAdmin() ? `<span style="font-size:12px;color:#888">${t.user_name||''}</span>` : ''}
+          <span class="badge ${typeBadge}">${t.trip_type||''}</span>
+          <span class="badge ${badgeMap[t.status]||'badge-open'}">${t.status||''}</span>
+        </div>
+        <div class="trip-route">${t.departure_address||''} → ${t.arrival_address||''}</div>
+        <div class="trip-purpose">${t.purpose||''}</div>
+      </div>
+      <div>
+        <div class="trip-km">${km} km</div>
+        <div class="trip-actions">
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();printTrip('${t.id}')">PDF</button>
+          ${(t.status==='open' && (t.user_id===state.user?.uid||isAdmin())) ? `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editTrip('${t.id}')">✏️</button>` : ''}
+          ${isAdmin() && t.status==='open' ? `<button class="btn btn-success btn-sm" onclick="event.stopPropagation();approveT('${t.id}','goedgekeurd')">✓</button>` : ''}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+window.openDetail = id => { state.detailTrip = state.trips.find(t=>t.id===id); navigate('detail'); };
+window.printTrip  = id => { exportPDF(state.trips.find(t=>t.id===id)); };
+window.editTrip   = id => {
+  const t = state.trips.find(x=>x.id===id);
+  state.form = {...defaultForm(), ...t};
+  navigate('edit', {editId: id});
+};
+
+// ── Form ─────────────────────────────────────────────────────────────────────
+function renderForm() {
+  const f = state.form;
+  const km = f.odometer_start && f.odometer_end ? parseInt(f.odometer_end)-parseInt(f.odometer_start) : null;
+  const kmErr = km !== null && km < 0;
+
+  return `
+  <div class="page-header">
+    <div><div class="page-title">${state.editId ? 'Rit bewerken' : 'Nieuwe rit'}</div><div class="page-sub">* = verplicht</div></div>
+  </div>
+
+  ${kmErr ? '<div class="alert alert-error">⚠️ Eindstand is lager dan beginstand!</div>' : ''}
+
+  <div class="card">
+    <div class="card-header">Rit gegevens</div>
+    <div class="card-body">
+      <div class="form-row">
+        <div class="form-group"><label>Datum *</label>
+          <input type="date" value="${f.trip_date}" onchange="setF('trip_date',this.value)"/></div>
+        <div class="form-group"><label>Voertuig *</label>
+          <select onchange="setF('vehicle_id',this.value)">
+            <option value="">— selecteer —</option>
+            ${state.vehicles.map(v=>`<option value="${v.id}" ${f.vehicle_id===v.id?'selected':''}>${v.license}${v.brand?' · '+v.brand:''}</option>`).join('')}
+          </select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Vertrektijd</label>
+          <input type="time" value="${f.departure_time}" onchange="setF('departure_time',this.value)"/></div>
+        <div class="form-group"><label>Aankomsttijd</label>
+          <input type="time" value="${f.arrival_time}" onchange="setF('arrival_time',this.value)"/></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Kilometerstanden</div>
+    <div class="card-body">
+      <div class="form-row-3">
+        <div class="form-group"><label>Beginstand *</label>
+          <input type="number" value="${f.odometer_start}" placeholder="km" oninput="setF('odometer_start',this.value)"/></div>
+        <div class="form-group"><label>Eindstand *</label>
+          <input type="number" value="${f.odometer_end}" placeholder="km" oninput="setF('odometer_end',this.value)"/></div>
+        <div class="form-group"><label>Totaal</label>
+          <div class="km-display ${kmErr?'error':''}">
+            <span>${km !== null ? km : '—'}</span>
+            <small>km</small>
+          </div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Route</div>
+    <div class="card-body">
+      <div class="form-group"><label>Vertrekadres *</label>
+        <input type="text" value="${f.departure_address}" placeholder="Straat, huisnummer, plaats" oninput="setF('departure_address',this.value)"/></div>
+      <div class="form-group"><label>Aankomstadres *</label>
+        <input type="text" value="${f.arrival_address}" placeholder="Straat, huisnummer, plaats" oninput="setF('arrival_address',this.value)"/></div>
+      <div class="form-group"><label>Doel / klant / project *</label>
+        <input type="text" value="${f.purpose}" oninput="setF('purpose',this.value)"/></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Type rit</div>
+    <div class="card-body">
+      <div class="form-row">
+        <div class="form-group"><label>Zakelijk of privé *</label>
+          <select onchange="setF('trip_type',this.value)">
+            <option value="Zakelijk" ${f.trip_type==='Zakelijk'?'selected':''}>Zakelijk</option>
+            <option value="Privé" ${f.trip_type==='Privé'?'selected':''}>Privé</option>
+          </select></div>
+        <div class="form-group"><label>Afwijkende route?</label>
+          <select onchange="setF('detour',this.value==='ja')">
+            <option value="nee" ${!f.detour?'selected':''}>Nee</option>
+            <option value="ja"  ${f.detour?'selected':''}>Ja</option>
+          </select></div>
+      </div>
+      ${f.detour ? `
+      <div class="form-group"><label>Reden afwijking</label>
+        <textarea oninput="setF('detour_reason',this.value)">${f.detour_reason}</textarea></div>
+      <div class="form-group"><label>Privé-omrijkilometers</label>
+        <input type="number" value="${f.private_km}" oninput="setF('private_km',this.value)"/></div>
+      ` : ''}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Extra</div>
+    <div class="card-body">
+      <div class="form-group"><label>Opmerkingen</label>
+        <textarea oninput="setF('notes',this.value)">${f.notes}</textarea></div>
+      <div class="form-group">
+        <label>Handtekening bestuurder</label>
+        <canvas id="sig-canvas"></canvas>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="clearSig()" style="margin-top:6px">Wissen</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="btn-group" style="margin-top:4px">
+    <button class="btn btn-primary btn-full" onclick="doSave()" ${state.saving?'disabled':''}>
+      ${state.saving ? 'Opslaan…' : (state.editId ? 'Wijzigingen opslaan' : 'Rit opslaan')}
+    </button>
+    <button class="btn btn-secondary" onclick="navigate_to('trips')">Annuleren</button>
+  </div>`;
+}
+window.setF    = (k,v) => { state.form[k]=v; render(); };
+window.doSave  = () => saveTrip();
+window.clearSig = clearSig;
+
+// ── Detail ───────────────────────────────────────────────────────────────────
+function renderDetail() {
+  const t = state.detailTrip;
+  if (!t) return '<p>Niet gevonden.</p>';
+  return `
+  <div class="page-header">
+    <div><div class="page-title">Ritdetails</div></div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-secondary btn-sm" onclick="printTrip('${t.id}')">PDF</button>
+      ${t.status==='open' && (t.user_id===state.user?.uid||isAdmin()) ? `<button class="btn btn-primary btn-sm" onclick="editTrip('${t.id}')">Bewerken</button>` : ''}
+      ${isAdmin() && t.status==='open' ? `
+        <button class="btn btn-success btn-sm" onclick="approveT('${t.id}','goedgekeurd')">✓ Goed</button>
+        <button class="btn btn-danger btn-sm"  onclick="approveT('${t.id}','afgekeurd')">✗ Af</button>` : ''}
+    </div>
+  </div>
+  <div class="card">
+    <table class="detail-table">
+      <tr><td>Datum</td><td>${t.trip_date||''}</td></tr>
+      <tr><td>Bestuurder</td><td>${t.user_name||''}</td></tr>
+      <tr><td>Kenteken</td><td>${t.vehicle_license||''}</td></tr>
+      <tr><td>Vertrektijd</td><td>${t.departure_time||'-'}</td></tr>
+      <tr><td>Aankomsttijd</td><td>${t.arrival_time||'-'}</td></tr>
+      <tr><td>Beginstand</td><td>${t.odometer_start||''} km</td></tr>
+      <tr><td>Eindstand</td><td>${t.odometer_end||''} km</td></tr>
+      <tr><td><strong>Totaal gereden</strong></td><td><strong style="color:var(--red)">${t.km_total||0} km</strong></td></tr>
+      <tr><td>Vertrekadres</td><td>${t.departure_address||''}</td></tr>
+      <tr><td>Aankomstadres</td><td>${t.arrival_address||''}</td></tr>
+      <tr><td>Doel / klant</td><td>${t.purpose||''}</td></tr>
+      <tr><td>Type rit</td><td><span class="badge ${t.trip_type==='Zakelijk'?'badge-zakelijk':'badge-prive'}">${t.trip_type||''}</span></td></tr>
+      <tr><td>Afwijkende route</td><td>${t.detour?'Ja':'Nee'}</td></tr>
+      ${t.detour?`<tr><td>Reden</td><td>${t.detour_reason||'-'}</td></tr><tr><td>Privé-omrijkm</td><td>${t.private_km||0} km</td></tr>`:''}
+      <tr><td>Opmerkingen</td><td>${t.notes||'-'}</td></tr>
+      <tr><td>Status</td><td><span class="badge badge-${t.status||'open'}">${t.status||'open'}</span></td></tr>
+    </table>
+  </div>
+  ${t.signature_data ? `<div class="card"><div class="card-header">Handtekening</div><div class="card-body"><img src="${t.signature_data}" style="max-height:80px;border:1px solid #e0e0e0;border-radius:6px"></div></div>` : ''}
+  <button class="btn btn-secondary btn-full" onclick="navigate_to('trips')">← Terug</button>`;
+}
+
+// ── Admin ────────────────────────────────────────────────────────────────────
+function renderAdmin() {
+  return `
+  <div class="page-header"><div class="page-title">Beheer</div></div>
+  <div class="tab-bar">
+    <button class="tab-btn ${state.adminTab==='vehicles'?'active':''}" onclick="setAdminTab('vehicles')">🚗 Voertuigen</button>
+    <button class="tab-btn ${state.adminTab==='users'?'active':''}"    onclick="setAdminTab('users')">👥 Gebruikers</button>
+    <button class="tab-btn ${state.adminTab==='approve'?'active':''}"  onclick="setAdminTab('approve')">✅ Goedkeuren (${state.trips.filter(t=>t.status==='open').length})</button>
+  </div>
+  ${state.adminTab==='vehicles' ? renderAdminVehicles() : state.adminTab==='users' ? renderAdminUsers() : renderAdminApprove()}`;
+}
+window.setAdminTab = t => { state.adminTab=t; if(t==='users')loadUsers().then(render); else render(); };
+
+function renderAdminVehicles() {
+  return `
+  <div class="card">
+    <div class="card-header">Voertuig toevoegen</div>
+    <div class="card-body">
+      <div class="form-row">
+        <input type="text" id="v-license" placeholder="Kenteken *" style="font-size:14px"/>
+        <input type="text" id="v-brand"   placeholder="Merk"       style="font-size:14px"/>
+      </div>
+      <input type="text" id="v-model" placeholder="Model" style="font-size:14px;margin-top:8px;width:100%;"/>
+      <button class="btn btn-primary btn-full" style="margin-top:10px" onclick="doAddVehicle()">Toevoegen</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header">Voertuigen (${state.vehicles.length})</div>
+    ${state.vehicles.map(v => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #f0f0f0">
+      <div><span style="font-family:monospace;font-weight:700">${v.license}</span><span style="color:#888;font-size:12px;margin-left:8px">${v.brand||''} ${v.model||''}</span></div>
+    </div>`).join('')}
+  </div>`;
+}
+window.doAddVehicle = () => {
+  const l = document.getElementById('v-license')?.value;
+  const b = document.getElementById('v-brand')?.value;
+  const m = document.getElementById('v-model')?.value;
+  addVehicle(l,b,m).then(render);
+};
+
+function renderAdminUsers() {
+  return `
+  <div class="card">
+    <div class="card-header">Nieuwe gebruiker uitnodigen</div>
+    <div class="card-body">
+      <div class="alert alert-info" style="margin-bottom:12px">Maak een account aan via Firebase Console → Authentication → Add user, of gebruik onderstaand formulier.</div>
+      <input type="email"    id="u-email" placeholder="E-mailadres *"  style="font-size:14px;width:100%;margin-bottom:8px"/>
+      <input type="text"     id="u-name"  placeholder="Volledige naam *" style="font-size:14px;width:100%;margin-bottom:8px"/>
+      <input type="password" id="u-pw"    placeholder="Tijdelijk wachtwoord *" style="font-size:14px;width:100%;margin-bottom:8px"/>
+      <button class="btn btn-primary btn-full" onclick="doCreateUser()">Gebruiker aanmaken</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header">Gebruikers (${state.users.length})</div>
+    ${state.users.map(u => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #f0f0f0">
+      <div><span style="font-weight:500">${u.full_name||u.email}</span><br><span style="color:#888;font-size:12px">${u.email}</span></div>
+      <select onchange="changeRole('${u.id}',this.value)" style="font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid #ddd">
+        <option value="medewerker" ${u.role==='medewerker'?'selected':''}>Medewerker</option>
+        <option value="admin"      ${u.role==='admin'?'selected':''}>Admin</option>
+      </select>
+    </div>`).join('')}
+  </div>`;
+}
+window.doCreateUser = async () => {
+  const email = document.getElementById('u-email')?.value;
+  const name  = document.getElementById('u-name')?.value;
+  const pw    = document.getElementById('u-pw')?.value;
+  if (!email||!pw) { flash('E-mail en wachtwoord zijn verplicht','error'); return; }
+  try {
+    const {user} = await createUserWithEmailAndPassword(auth, email, pw);
+    const {setDoc} = await import('https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js');
+    await setDoc(doc(db,'users',user.uid), {email,full_name:name||email,role:'medewerker',created_at:serverTimestamp()});
+    flash('Gebruiker aangemaakt ✓');
+    await loadUsers(); render();
+  } catch(e) { flash('Fout: '+e.message,'error'); }
+};
+window.changeRole = async (id, role) => {
+  await updateDoc(doc(db,'users',id),{role});
+  flash('Rol bijgewerkt ✓');
+  state.users = state.users.map(u => u.id===id ? {...u,role} : u);
+  render();
+};
+
+function renderAdminApprove() {
+  const open = state.trips.filter(t=>t.status==='open');
+  return `
+  <div class="card">
+    <div class="card-header">Openstaande ritten (${open.length})</div>
+    ${open.length===0 ? '<div class="empty"><div class="empty-icon">✅</div><p>Alles is verwerkt</p></div>' : ''}
+    ${open.map(t => `
+    <div style="padding:14px 16px;border-bottom:1px solid #f0f0f0">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div>
+          <p style="font-weight:600;font-size:14px">${t.trip_date} · ${t.user_name||''} · ${t.vehicle_license||''}</p>
+          <p style="font-size:12px;color:#666">${t.departure_address||''} → ${t.arrival_address||''}</p>
+          <p style="font-size:12px;color:#666">${t.purpose||''}</p>
+          <p style="font-size:16px;font-weight:700;color:var(--red);margin-top:4px">${t.km_total||0} km
+            <span class="badge ${t.trip_type==='Zakelijk'?'badge-zakelijk':'badge-prive'}" style="margin-left:6px">${t.trip_type}</span>
+          </p>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-success btn-sm" onclick="approveT('${t.id}','goedgekeurd')">✓ Goed</button>
+          <button class="btn btn-danger btn-sm"  onclick="approveT('${t.id}','afgekeurd')">✗ Afkeur</button>
+        </div>
+      </div>
+    </div>`).join('')}
+  </div>`;
+}
+
+// ── Login ────────────────────────────────────────────────────────────────────
+function renderLogin() {
+  return `
+  <div class="login-wrap">
+    <div class="login-logo">
+      <div><span class="bar"></span><span class="name">Q-LINE</span></div>
+      <p>RITTENREGISTRATIE</p>
+      <p style="color:#666;font-size:10px;margin-top:4px">PIONEERS IN EQUESTRIAN INNOVATION</p>
+    </div>
+    <div class="login-card">
+      <h2 style="font-size:18px;font-weight:700;margin-bottom:16px">Inloggen</h2>
+      <div id="login-error"></div>
+      <div class="form-group"><label>E-mailadres</label><input type="email" id="login-email" placeholder="jouw@email.nl"/></div>
+      <div class="form-group"><label>Wachtwoord</label><input type="password" id="login-pw" placeholder="••••••••"/></div>
+      <button class="btn btn-primary btn-full" id="login-btn">Inloggen</button>
+    </div>
+  </div>`;
+}
+
+function bindLogin() {
+  const btn = document.getElementById('login-btn');
+  const doLogin = async () => {
+    const email = document.getElementById('login-email').value;
+    const pw    = document.getElementById('login-pw').value;
+    const err   = document.getElementById('login-error');
+    err.innerHTML = '';
+    btn.textContent = 'Bezig…'; btn.disabled = true;
+    const {error} = await signInWithEmailAndPassword(auth, email, pw).catch(e => ({error:e}));
+    if (error) {
+      err.innerHTML = `<div class="alert alert-error">Onjuist e-mailadres of wachtwoord</div>`;
+      btn.textContent = 'Inloggen'; btn.disabled = false;
+    }
+  };
+  btn.onclick = doLogin;
+  document.getElementById('login-pw').onkeydown = e => { if(e.key==='Enter') doLogin(); };
+}
+
+function bindEvents() {
+  // All events are handled via inline onclick attributes
+}
+
+// ── PWA manifest ─────────────────────────────────────────────────────────────
+const manifest = {
+  name: 'Q-Line Rittenregistratie',
+  short_name: 'Q-Line Ritten',
+  description: 'Bedrijfsrittenregistratie Q-Line Equestrian B.V.',
+  theme_color: '#C0392B', background_color: '#ffffff',
+  display: 'standalone', orientation: 'portrait', start_url: '.',
+  icons: [{src:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" fill="%231a1a1a"/><rect x="20" y="40" width="12" height="112" fill="%23C0392B"/><text x="40" y="120" font-family="Arial" font-weight="bold" font-size="64" fill="white">Q</text></svg>',sizes:'192x192',type:'image/svg+xml'}]
+};
+const blob = new Blob([JSON.stringify(manifest)],{type:'application/json'});
+document.getElementById('pwa-manifest').href = URL.createObjectURL(blob);
+
+// ── setDoc import fix ─────────────────────────────────────────────────────────
+import { setDoc } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+render();
+</script>
+</body>
+</html>
