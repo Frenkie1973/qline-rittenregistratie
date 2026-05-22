@@ -495,7 +495,45 @@ function navItem(page, icon, label) {
   const active = state.page === page || (page==='new' && state.page==='edit') ? 'active' : '';
   return `<button class="nav-item ${active}" onclick="navigate_to('${page}')">${icon}<br><span style="font-size:10px">${label}</span></button>`;
 }
-window.navigate_to = page => navigate(page === 'new' ? 'new' : page, page==='new'?{form:defaultForm(),editId:null}:{});
+window.navigate_to = async page => {
+  if (page === 'new') {
+    const form = defaultForm();
+    navigate('new', {form, editId:null});
+    // Haal laatste eindstand op uit Firebase voor geselecteerd voertuig
+    await autoFillLastOdometer();
+  } else {
+    navigate(page);
+  }
+};
+
+async function autoFillLastOdometer(vehicleId) {
+  try {
+    const { getFirestore, collection, query, where, orderBy, limit, getDocs } = 
+      await import('https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js');
+    const { getApp } = await import('https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js');
+    const db = getFirestore(getApp());
+    
+    // Haal de laatste rit op van deze gebruiker (of dit voertuig)
+    const vId = vehicleId || state.form.vehicle_id;
+    let q;
+    if (vId) {
+      q = query(collection(db,'trips'), where('vehicle_id','==',vId), orderBy('trip_date','desc'), orderBy('created_at','desc'), limit(1));
+    } else {
+      q = query(collection(db,'trips'), where('user_id','==',state.user.uid), orderBy('trip_date','desc'), orderBy('created_at','desc'), limit(1));
+    }
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const lastTrip = snap.docs[0].data();
+      if (lastTrip.odometer_end) {
+        state.form.odometer_start = String(lastTrip.odometer_end);
+        // Update het inputveld direct als het al in de DOM staat
+        const inp = document.getElementById('inp-odo-start');
+        if (inp) inp.value = lastTrip.odometer_end;
+        updateKmDisplay();
+      }
+    }
+  } catch(e) { console.log('autoFill error:', e); }
+}
 
 function renderHeader() {
   const pending = JSON.parse(localStorage.getItem('pending_trips')||'[]').length;
@@ -725,7 +763,7 @@ function renderForm() {
         <div class="form-group"><label>Datum *</label>
           <input type="date" value="${f.trip_date}" onchange="setF('trip_date',this.value)"/></div>
         <div class="form-group"><label>Voertuig *</label>
-          <select onchange="setF('vehicle_id',this.value)">
+          <select onchange="setF('vehicle_id',this.value);autoFillLastOdometer(this.value)">
             <option value="">— selecteer —</option>
             ${state.vehicles.map(v=>`<option value="${v.id}" ${f.vehicle_id===v.id?'selected':''}>${v.license}${v.brand?' · '+v.brand:''}</option>`).join('')}
           </select></div>
