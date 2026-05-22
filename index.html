@@ -190,10 +190,15 @@ let state = {
 function defaultForm() {
   const d = new Date();
   const pad = n => String(n).padStart(2,'0');
+  // Haal laatste eindstand op uit vorige rit
+  const lastEnd = localStorage.getItem('last_odometer_end') || '';
+  const lastVehicle = localStorage.getItem('last_vehicle_id') || '';
   return {
     trip_date: `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`,
     departure_time:'', arrival_time:'',
-    vehicle_id:'', odometer_start:'', odometer_end:'',
+    vehicle_id: lastVehicle,
+    odometer_start: lastEnd,
+    odometer_end:'',
     departure_address:'', arrival_address:'',
     purpose:'', trip_type:'Zakelijk',
     detour: false, detour_reason:'', private_km:'0', notes:''
@@ -360,6 +365,9 @@ async function saveTrip() {
     }
     await loadTrips();
     state.saving = false;
+    // Sla eindstand en voertuig op voor volgende rit
+    localStorage.setItem('last_odometer_end', String(payload.odometer_end));
+    localStorage.setItem('last_vehicle_id', payload.vehicle_id);
     state.editId = null;
     state.form = defaultForm();
     flash('Rit opgeslagen ✓');
@@ -750,9 +758,17 @@ function renderForm() {
     <div class="card-header">Route</div>
     <div class="card-body">
       <div class="form-group"><label>Vertrekadres *</label>
-        <input type="text" value="${f.departure_address}" placeholder="Straat, huisnummer, plaats" oninput="setF('departure_address',this.value)"/></div>
-      <div class="form-group"><label>Aankomstadres *</label>
-        <input type="text" value="${f.arrival_address}" placeholder="Straat, huisnummer, plaats" oninput="setF('arrival_address',this.value)"/></div>
+        <input type="text" id="inp-departure" value="${f.departure_address}" placeholder="Straat, huisnummer, plaats" 
+          oninput="setF('departure_address',this.value);showSuggestions('departure',this.value)"
+          onblur="setTimeout(()=>hideSuggestions('departure'),200)" autocomplete="off"/>
+        <div id="sug-departure" style="display:none;position:absolute;background:#fff;border:1px solid #ddd;border-radius:8px;z-index:999;width:100%;max-height:150px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
+      </div>
+      <div class="form-group" style="position:relative"><label>Aankomstadres *</label>
+        <input type="text" id="inp-arrival" value="${f.arrival_address}" placeholder="Straat, huisnummer, plaats"
+          oninput="setF('arrival_address',this.value);showSuggestions('arrival',this.value)"
+          onblur="setTimeout(()=>hideSuggestions('arrival'),200)" autocomplete="off"/>
+        <div id="sug-arrival" style="display:none;position:absolute;background:#fff;border:1px solid #ddd;border-radius:8px;z-index:999;width:100%;max-height:150px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
+      </div>
       <div class="form-group"><label>Doel / klant / project *</label>
         <input type="text" value="${f.purpose}" oninput="setF('purpose',this.value)"/></div>
     </div>
@@ -800,11 +816,78 @@ function renderForm() {
       ${state.saving ? 'Opslaan…' : (state.editId ? 'Wijzigingen opslaan' : 'Rit opslaan')}
     </button>
     <button class="btn btn-secondary" onclick="navigate_to('trips')">Annuleren</button>
-  </div>`;
+  </div>
+  ${!state.editId ? `
+  <div style="margin-top:8px">
+    <button class="btn btn-secondary btn-full" onclick="doSaveAndReturn()" ${state.saving?'disabled':''} 
+      style="background:#f0f4ff;color:#1a3c8f;border:1px solid #c0ccee">
+      🔄 Opslaan + retourrit aanmaken
+    </button>
+  </div>` : ''}`;
 }
-window.setF    = (k,v) => { state.form[k]=v; render(); };
+window.setF = (k,v) => {
+  state.form[k] = v;
+  // Alleen re-render als km-berekening verandert (start/end odometer)
+  if (k === 'odometer_start' || k === 'odometer_end' || k === 'detour' || k === 'trip_type') {
+    render();
+  }
+  // Adres opslaan in geheugen
+  if (k === 'departure_address' || k === 'arrival_address') {
+    const saved = JSON.parse(localStorage.getItem('saved_addresses') || '[]');
+    if (v.length > 3 && !saved.includes(v)) {
+      saved.unshift(v);
+      localStorage.setItem('saved_addresses', JSON.stringify(saved.slice(0, 30)));
+    }
+  }
+};
 window.doSave  = () => saveTrip();
 window.clearSig = clearSig;
+
+// Adres autocomplete
+window.showSuggestions = (field, val) => {
+  if (!val || val.length < 2) { hideSuggestions(field); return; }
+  const saved = JSON.parse(localStorage.getItem('saved_addresses') || '[]');
+  const matches = saved.filter(a => a.toLowerCase().includes(val.toLowerCase())).slice(0,6);
+  const el = document.getElementById('sug-' + field);
+  if (!el || !matches.length) { hideSuggestions(field); return; }
+  el.style.display = 'block';
+  el.innerHTML = matches.map(a => 
+    `<div onclick="pickAddress('${field}','${a.replace(/'/g,"\'")}');hideSuggestions('${field}')" 
+      style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0f0" 
+      onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''">${a}</div>`
+  ).join('');
+};
+window.hideSuggestions = field => {
+  const el = document.getElementById('sug-' + field);
+  if (el) el.style.display = 'none';
+};
+window.pickAddress = (field, val) => {
+  const key = field === 'departure' ? 'departure_address' : 'arrival_address';
+  state.form[key] = val;
+  const inp = document.getElementById('inp-' + field);
+  if (inp) inp.value = val;
+};
+
+// Retourrit: wissel van/naar adres en begin bij huidige eindstand
+window.doSaveAndReturn = async () => {
+  await saveTrip();
+  // Na opslaan: maak retourrit met omgekeerde adressen
+  const prev = state.form;
+  const lastEnd = localStorage.getItem('last_odometer_end') || '';
+  state.form = {
+    ...defaultForm(),
+    vehicle_id: localStorage.getItem('last_vehicle_id') || '',
+    odometer_start: lastEnd,
+    departure_address: prev.arrival_address || '',
+    arrival_address:  prev.departure_address || '',
+    purpose:    prev.purpose || '',
+    trip_type:  prev.trip_type || 'Zakelijk',
+  };
+  state.editId = null;
+  state.page = 'new';
+  render();
+  flash('Retourrit aangemaakt — controleer en sla op', 'info');
+};
 
 // ── Detail ───────────────────────────────────────────────────────────────────
 function renderDetail() {
