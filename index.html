@@ -75,6 +75,11 @@ textarea{resize:vertical;min-height:70px}
 .tab-bar{display:flex;background:#f0f0f0;border-radius:10px;padding:3px;margin-bottom:16px}
 .tb{flex:1;padding:8px;border:none;background:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;transition:.2s;font-family:inherit;color:#888}
 .tb.on{background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.1);color:#000;font-weight:600}
+.adrop{position:absolute;background:#fff;border:1px solid var(--border);border-radius:8px;z-index:999;width:100%;max-height:180px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.12);margin-top:2px}
+.adrop-item{padding:11px 14px;cursor:pointer;font-size:14px;border-bottom:1px solid #f5f5f5}
+.adrop-item:hover{background:#f5f5f5}
+.adrop-item:last-child{border-bottom:none}
+.awrap{position:relative}
 </style>
 </head>
 <body>
@@ -133,6 +138,20 @@ function go(page, extra={}) {
 
 function loadAR() {
   try { S.activeRides = JSON.parse(localStorage.getItem('qline_ar')||'{}'); } catch(e) { S.activeRides = {}; }
+  // Zorg dat Q-Line adres altijd in de lijst staat
+  const saved = JSON.parse(localStorage.getItem('qline_addr')||'[]');
+  const qline = 'Haarbrinksweg 47, Geesteren';
+  if (!saved.includes(qline)) { saved.unshift(qline); localStorage.setItem('qline_addr', JSON.stringify(saved)); }
+}
+
+function getSavedAddresses() {
+  try { return JSON.parse(localStorage.getItem('qline_addr')||'["Haarbrinksweg 47, Geesteren"]'); } catch(e) { return ['Haarbrinksweg 47, Geesteren']; }
+}
+
+function saveAddress(addr) {
+  if (!addr || addr.length < 3) return;
+  const saved = getSavedAddresses();
+  if (!saved.includes(addr)) { saved.unshift(addr); localStorage.setItem('qline_addr', JSON.stringify(saved.slice(0,40))); }
 }
 function saveAR() { localStorage.setItem('qline_ar', JSON.stringify(S.activeRides)); }
 
@@ -343,7 +362,11 @@ function renderRijden() {
     </div>
     <div id="rinfo" style="display:none">
       <div class="alert ai" id="rstatus">Laden...</div>
-      <div class="fg"><label>Vertrekadres</label><input type="text" id="rfrom" placeholder="Automatisch ingevuld" style="font-size:14px"/></div>
+      <div class="fg awrap"><label>Vertrekadres</label>
+        <input type="text" id="rfrom" placeholder="Automatisch ingevuld of typ adres" style="font-size:14px" autocomplete="off"
+          oninput="showAddrSug('rfrom',this.value)" onfocus="showAddrSug('rfrom',this.value)" onblur="setTimeout(()=>hideAddrSug('rfrom'),200)"/>
+        <div id="sug-rfrom" class="adrop" style="display:none"></div>
+      </div>
       <div class="fg"><label style="font-weight:700">Beginstand km *</label><input type="number" id="rkm" placeholder="km stand" style="font-size:20px;padding:14px;font-weight:700"/></div>
       <div class="fg"><label>Doel van de rit / klant *</label><input type="text" id="rpurpose" placeholder="bijv. klant bezoek, levering..." style="font-size:14px"/></div>
       <div class="fg"><label>Type rit</label>
@@ -384,7 +407,11 @@ function renderAankomst() {
       Beginstand: <strong>${ride.start_km} km</strong> &nbsp;|&nbsp; Rijder: ${esc(ride.user_name||'')}<br>
       Doel: ${esc(ride.purpose||'')}
     </div>
-    <div class="fg"><label style="font-weight:700">Aankomstadres *</label><input type="text" id="aaddr" placeholder="Straat, huisnummer, plaats" style="font-size:14px"/></div>
+    <div class="fg awrap"><label style="font-weight:700">Aankomstadres *</label>
+        <input type="text" id="aaddr" placeholder="Straat, huisnummer, plaats" style="font-size:14px" autocomplete="off"
+          oninput="showAddrSug('aaddr',this.value)" onfocus="showAddrSug('aaddr',this.value)" onblur="setTimeout(()=>hideAddrSug('aaddr'),200)"/>
+        <div id="sug-aaddr" class="adrop" style="display:none"></div>
+      </div>
     <div class="fg"><label style="font-weight:700">Eindstand km *</label><input type="number" id="akm" placeholder="km stand" style="font-size:20px;padding:14px;font-weight:700"/><p style="font-size:12px;color:#888;margin-top:4px">Beginstand was: ${ride.start_km} km</p></div>
     <div class="fg"><label>Aankomsttijd</label><input type="time" id="atime" value="${nowTime()}" style="font-size:14px"/></div>
     <div class="fg"><label>Opmerkingen</label><textarea id="anotes" rows="2" style="font-size:14px"></textarea></div>
@@ -702,6 +729,30 @@ window.changeRole = async (id, role) => {
 };
 
 // ── Rijden acties ─────────────────────────────────────────────────────────────
+window.showAddrSug = (fieldId, val) => {
+  const drop = document.getElementById('sug-'+fieldId);
+  if (!drop) return;
+  const saved = getSavedAddresses();
+  const matches = val.length < 1
+    ? saved.slice(0,6)
+    : saved.filter(a => a.toLowerCase().includes(val.toLowerCase())).slice(0,6);
+  if (!matches.length) { drop.style.display='none'; return; }
+  drop.style.display = 'block';
+  drop.innerHTML = matches.map(a =>
+    `<div class="adrop-item" onmousedown="pickAddr('${fieldId}','${a.replace(/'/g,"\'")}')">${a}</div>`
+  ).join('');
+};
+
+window.hideAddrSug = (fieldId) => {
+  const drop = document.getElementById('sug-'+fieldId);
+  if (drop) drop.style.display = 'none';
+};
+
+window.pickAddr = (fieldId, addr) => {
+  const inp = document.getElementById(fieldId);
+  if (inp) { inp.value = addr; hideAddrSug(fieldId); }
+};
+
 window.onVehicleSelect = (vid) => {
   const info = document.getElementById('rinfo');
   const status = document.getElementById('rstatus');
@@ -759,6 +810,8 @@ window.stopRit = async () => {
   if (endKm < ride.start_km) { flash('Eindstand moet hoger zijn dan beginstand','error'); return; }
   const v = S.vehicles.find(x=>x.id===vid);
   try {
+    saveAddress(addr);
+    saveAddress(ride.start_addr);
     await addDoc(collection(db,'trips'),{
       vehicle_id: vid,
       vehicle_license: v?.license||'',
