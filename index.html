@@ -177,6 +177,7 @@ let state = {
   user: null, profile: null,
   page: 'dashboard', prevPage: null,
   trips: [], vehicles: [], users: [],
+  activeRides: {}, // actieve ritten per voertuig: {vehicle_id: {start_km, start_address, start_time, departure_time, purpose}}
   loading: true, saving: false,
   editId: null,
   filterFrom: '', filterTo: '', filterType: '', filterStatus: '', filterSearch: '',
@@ -248,6 +249,42 @@ async function loadTrips() {
 async function loadVehicles() {
   const snap = await getDocs(query(collection(db,'vehicles'), orderBy('license')));
   state.vehicles = snap.docs.map(d => ({id:d.id,...d.data()})).filter(v => v.active !== false);
+}
+
+// Laad actieve ritten uit localStorage (per voertuig)
+function loadActiveRides() {
+  try {
+    state.activeRides = JSON.parse(localStorage.getItem('active_rides') || '{}');
+  } catch(e) { state.activeRides = {}; }
+}
+
+function saveActiveRides() {
+  localStorage.setItem('active_rides', JSON.stringify(state.activeRides));
+}
+
+// Haal laatste rit status op per voertuig uit Firebase
+async function loadVehicleStatus() {
+  try {
+    const { query: q2, where, orderBy, limit, getDocs: gd } = 
+      await import('https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js');
+    // Voor elk voertuig: haal laatste rit op
+    for (const v of state.vehicles) {
+      const snap = await getDocs(query(collection(db,'trips'), where('vehicle_id','==',v.id), orderBy('trip_date','desc'), limit(3)));
+      if (!snap.empty) {
+        // Pak de rit met hoogste eindstand
+        let best = null;
+        snap.docs.forEach(d => {
+          const t = d.data();
+          if (!best || (t.odometer_end > (best.odometer_end||0))) best = t;
+        });
+        if (best) {
+          v.last_odometer = best.odometer_end;
+          v.last_address   = best.arrival_address;
+          v.last_date      = best.trip_date;
+        }
+      }
+    }
+  } catch(e) { /* geen index, skip */ }
 }
 
 async function loadUsers() {
@@ -482,8 +519,9 @@ function render() {
     <main>${renderPage()}</main>
     <nav style="position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #e0e0e0;display:flex;z-index:100">
       ${navItem('dashboard','📊','Dashboard')}
-      ${navItem('new','➕','Nieuwe rit')}
-      ${navItem('trips','🚗','Ritten')}
+      ${navItem('rijden','🚗','Ga rijden')}
+      ${navItem('aankomst','📍','Aangekomen')}
+      ${navItem('trips','📋','Ritten')}
       ${isAdmin() ? navItem('admin','⚙️','Beheer') : ''}
     </nav>
   `;
@@ -493,14 +531,16 @@ function render() {
 
 function navItem(page, icon, label) {
   const active = state.page === page || (page==='new' && state.page==='edit') ? 'active' : '';
-  return `<button class="nav-item ${active}" onclick="navigate_to('${page}')">${icon}<br><span style="font-size:10px">${label}</span></button>`;
+  // Toon badge op aankomst als er actieve ritten zijn
+  const hasActive = page === 'aankomst' && Object.keys(state.activeRides).length > 0;
+  return `<button class="nav-item ${active}" onclick="navigate_to('${page}')" style="position:relative">
+    ${hasActive ? '<span style="position:absolute;top:4px;right:12px;background:var(--red);color:#fff;border-radius:50%;width:16px;height:16px;font-size:10px;display:flex;align-items:center;justify-content:center">!</span>' : ''}
+    ${icon}<br><span style="font-size:10px">${label}</span>
+  </button>`;
 }
 window.navigate_to = async page => {
   if (page === 'new') {
-    const form = defaultForm();
-    navigate('new', {form, editId:null});
-    // Haal laatste eindstand op uit Firebase voor geselecteerd voertuig
-    await autoFillLastOdometer();
+    navigate('new', {form: defaultForm(), editId:null});
   } else {
     navigate(page);
   }
@@ -587,6 +627,8 @@ function renderPage() {
   if (state.page === 'dashboard') html += renderDashboard();
   else if (state.page === 'trips') html += renderTrips();
   else if (state.page === 'new' || state.page === 'edit') html += renderForm();
+  else if (state.page === 'rijden') html += renderRijden();
+  else if (state.page === 'aankomst') html += renderAankomst();
   else if (state.page === 'detail') html += renderDetail();
   else if (state.page === 'admin') html += renderAdmin();
   return html;
@@ -628,6 +670,22 @@ function renderDashboard() {
     <div class="stat-card"><div class="stat-label">Privé</div><div class="stat-value" style="color:#4a1a6e">${prive}</div><div class="stat-sub">km</div></div>
     <div class="stat-card"><div class="stat-label">Open</div><div class="stat-value" style="color:${open>0?'#856404':'#166534'}">${open}</div><div class="stat-sub">te controleren</div></div>
   </div>
+
+  ${Object.keys(state.activeRides).length > 0 ? `
+  <div class="card" style="border-left:4px solid var(--red);margin-bottom:12px">
+    <div class="card-header" style="background:#fdf2f2;color:#721c24">🚗 Onderweg (${Object.keys(state.activeRides).length})</div>
+    ${Object.entries(state.activeRides).map(([vid, ride]) => {
+      const v = state.vehicles.find(x => x.id === vid);
+      return `<div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #fdf2f2">
+        <div>
+          <p style="font-weight:600">${v?.license||'?'} · ${ride.user_name||''}</p>
+          <p style="font-size:12px;color:#888">Vertrek: ${ride.start_address||'?'} · ${ride.departure_time||''} · ${ride.start_km} km</p>
+          <p style="font-size:12px;color:#888">${ride.purpose||''}</p>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="navigate_to('aankomst')">📍 Aankomst</button>
+      </div>`;
+    }).join('')}
+  </div>` : ''}
 
   ${isAdmin() && openTrips.length > 0 ? `
   <div class="card" style="border-left:3px solid #fbbf24;margin-bottom:12px">
@@ -775,6 +833,244 @@ window.editTrip   = id => {
 };
 
 // ── Form ─────────────────────────────────────────────────────────────────────
+// ── Nieuw rijden systeem ─────────────────────────────────────────────────────
+function renderRijden() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const timeNow = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+  return `
+  <div class="page-header">
+    <div><div class="page-title">🚗 Ik ga rijden</div><div class="page-sub">Kies voertuig en bevestig vertrek</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Voertuig kiezen</div>
+    <div class="card-body">
+      <div class="form-group">
+        <label>Voertuig *</label>
+        <select id="rij-vehicle" onchange="updateRijdenInfo(this.value)" style="font-size:16px;padding:14px">
+          <option value="">— kies voertuig —</option>
+          ${state.vehicles.map(v => {
+            const active = state.activeRides[v.id];
+            const label = active ? \`⚠️ \${v.license} · IN GEBRUIK\` : \`\${v.license}\${v.brand?' · '+v.brand:''}\${v.last_odometer?' ('+v.last_odometer+' km)':''}\`;
+            return \`<option value="\${v.id}">\${label}</option>\`;
+          }).join('')}
+        </select>
+      </div>
+      <div id="rij-info" style="display:none">
+        <div class="alert alert-info" id="rij-status" style="margin-bottom:12px"></div>
+        <div class="form-group">
+          <label>Vertrekadres</label>
+          <input type="text" id="rij-from" placeholder="Wordt automatisch ingevuld" style="font-size:15px"/>
+        </div>
+        <div class="form-group">
+          <label>Beginstand km *</label>
+          <input type="number" id="rij-km" placeholder="km stand" style="font-size:16px;padding:14px"/>
+        </div>
+        <div class="form-group">
+          <label>Doel van de rit / klant *</label>
+          <input type="text" id="rij-purpose" placeholder="bijv. Klant bezoek, levering..." style="font-size:15px"/>
+        </div>
+        <div class="form-group">
+          <label>Vertrektijd</label>
+          <input type="time" id="rij-time" value="${timeNow}" style="font-size:15px"/>
+        </div>
+        <button class="btn btn-primary btn-full" style="font-size:16px;padding:16px;margin-top:8px" onclick="startRit()">
+          🚗 Vertrekken
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn btn-secondary btn-full" onclick="navigate_to('trips')" style="margin-top:8px">Annuleren</button>`;
+}
+
+function renderAankomst() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const timeNow = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+  // Voertuigen met actieve rit
+  const actief = state.vehicles.filter(v => state.activeRides[v.id]);
+
+  if (!actief.length) {
+    return \`
+    <div class="page-header"><div class="page-title">📍 Aangekomen</div></div>
+    <div class="card"><div class="card-body">
+      <div class="empty"><div class="empty-icon">🚗</div><p>Geen actieve ritten gevonden.<br>Druk eerst op "Ik ga rijden".</p></div>
+    </div></div>
+    <button class="btn btn-secondary btn-full" onclick="navigate_to('dashboard')" style="margin-top:8px">Terug</button>\`;
+  }
+
+  const firstActive = actief[0];
+  const ride = state.activeRides[firstActive.id];
+
+  return \`
+  <div class="page-header">
+    <div><div class="page-title">📍 Aangekomen</div><div class="page-sub">Vul aankomstgegevens in</div></div>
+  </div>
+
+  <div class="card" style="border-left:4px solid var(--red)">
+    <div class="card-header">Actieve rit</div>
+    <div class="card-body">
+      ${actief.length > 1 ? \`
+      <div class="form-group">
+        <label>Welk voertuig?</label>
+        <select id="aankomst-vehicle" onchange="updateAankomstInfo(this.value)" style="font-size:16px;padding:14px">
+          \${actief.map(v => \`<option value="\${v.id}">\${v.license} · \${v.brand||''}</option>\`).join('')}
+        </select>
+      </div>\` : \`<input type="hidden" id="aankomst-vehicle" value="\${firstActive.id}"/>\`}
+
+      <div id="aankomst-info">
+        <div class="alert alert-info" style="margin-bottom:12px">
+          🚗 <strong>\${firstActive.license}</strong> · Vertrek: \${ride.start_address||'?'} · \${ride.departure_time||''}<br>
+          Beginstand: <strong>\${ride.start_km} km</strong> · Doel: \${ride.purpose||''}
+        </div>
+        <div class="form-group">
+          <label>Aankomstadres *</label>
+          <input type="text" id="aankomst-address" placeholder="Straat, huisnummer, plaats" style="font-size:15px"
+            oninput="saveAdres(this.value)"/>
+        </div>
+        <div class="form-group">
+          <label>Eindstand km *</label>
+          <input type="number" id="aankomst-km" placeholder="km stand" style="font-size:16px;padding:14px"/>
+          <p style="font-size:12px;color:#888;margin-top:4px">Beginstand: \${ride.start_km} km</p>
+        </div>
+        <div class="form-group">
+          <label>Aankomsttijd</label>
+          <input type="time" id="aankomst-time" value="${timeNow}" style="font-size:15px"/>
+        </div>
+        <div class="form-group">
+          <label>Type rit</label>
+          <select id="aankomst-type" style="font-size:15px;padding:12px">
+            <option value="Zakelijk">Zakelijk</option>
+            <option value="Privé">Privé</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Opmerkingen</label>
+          <textarea id="aankomst-notes" rows="2" style="font-size:14px"></textarea>
+        </div>
+        <button class="btn btn-primary btn-full" style="font-size:16px;padding:16px;margin-top:8px" onclick="stopRit()">
+          📍 Aankomst bevestigen & opslaan
+        </button>
+      </div>
+    </div>
+  </div>
+  <button class="btn btn-secondary btn-full" onclick="navigate_to('dashboard')" style="margin-top:8px">Annuleren</button>\`;
+}
+
+window.updateRijdenInfo = (vehicleId) => {
+  const info = document.getElementById('rij-info');
+  const status = document.getElementById('rij-status');
+  const kmInp = document.getElementById('rij-km');
+  const fromInp = document.getElementById('rij-from');
+  if (!info || !vehicleId) { if(info) info.style.display='none'; return; }
+  
+  info.style.display = 'block';
+  const v = state.vehicles.find(x => x.id === vehicleId);
+  if (v && v.last_odometer) {
+    kmInp.value = v.last_odometer;
+    fromInp.value = v.last_address || '';
+    status.innerHTML = \`Laatste rit: <strong>\${v.last_date||''}</strong> · Eindstand: <strong>\${v.last_odometer} km</strong> · Laatste locatie: \${v.last_address||'onbekend'}\`;
+  } else {
+    kmInp.value = '';
+    fromInp.value = '';
+    status.innerHTML = 'Eerste rit voor dit voertuig — vul de beginstand in';
+  }
+};
+
+window.startRit = async () => {
+  const vehicleId = document.getElementById('rij-vehicle')?.value;
+  const km = document.getElementById('rij-km')?.value;
+  const from = document.getElementById('rij-from')?.value;
+  const purpose = document.getElementById('rij-purpose')?.value;
+  const time = document.getElementById('rij-time')?.value;
+
+  if (!vehicleId) { flash('Kies een voertuig', 'error'); return; }
+  if (!km)        { flash('Vul de beginstand in', 'error'); return; }
+  if (!purpose)   { flash('Vul het doel van de rit in', 'error'); return; }
+
+  const d = new Date();
+  const pad = n => String(n).padStart(2,'0');
+
+  state.activeRides[vehicleId] = {
+    vehicle_id: vehicleId,
+    start_km: parseInt(km),
+    start_address: from,
+    purpose,
+    departure_time: time,
+    trip_date: \`\${d.getFullYear()}-\${pad(d.getMonth()+1)}-\${pad(d.getDate())}\`,
+    user_id: state.user.uid,
+    user_name: state.profile?.full_name || state.user.email,
+  };
+  saveActiveRides();
+  flash('Goede reis! Druk op "Aangekomen" als je er bent. 🚗');
+  navigate('dashboard');
+};
+
+window.stopRit = async () => {
+  const vehicleId = document.getElementById('aankomst-vehicle')?.value;
+  const endKm = parseInt(document.getElementById('aankomst-km')?.value);
+  const address = document.getElementById('aankomst-address')?.value;
+  const time = document.getElementById('aankomst-time')?.value;
+  const type = document.getElementById('aankomst-type')?.value;
+  const notes = document.getElementById('aankomst-notes')?.value;
+
+  if (!address) { flash('Vul het aankomstadres in', 'error'); return; }
+  if (!endKm)   { flash('Vul de eindstand in', 'error'); return; }
+
+  const ride = state.activeRides[vehicleId];
+  if (!ride) { flash('Geen actieve rit gevonden', 'error'); return; }
+
+  if (endKm < ride.start_km) { flash('Eindstand moet hoger zijn dan beginstand', 'error'); return; }
+
+  // Adres onthouden
+  const saved = JSON.parse(localStorage.getItem('saved_addresses') || '[]');
+  if (address && !saved.includes(address)) { saved.unshift(address); localStorage.setItem('saved_addresses', JSON.stringify(saved.slice(0,30))); }
+
+  const vehicle = state.vehicles.find(v => v.id === vehicleId);
+  const payload = {
+    ...ride,
+    vehicle_license: vehicle?.license || '',
+    odometer_start: ride.start_km,
+    odometer_end: endKm,
+    km_total: endKm - ride.start_km,
+    departure_address: ride.start_address || '',
+    arrival_address: address,
+    arrival_time: time,
+    trip_type: type,
+    notes: notes || '',
+    detour: false, detour_reason: '', private_km: 0,
+    status: 'open',
+    created_at: serverTimestamp(),
+  };
+
+  try {
+    await addDoc(collection(db,'trips'), payload);
+    
+    // Update voertuig status in memory
+    const v = state.vehicles.find(x => x.id === vehicleId);
+    if (v) { v.last_odometer = endKm; v.last_address = address; v.last_date = ride.trip_date; }
+
+    // Verwijder actieve rit
+    delete state.activeRides[vehicleId];
+    saveActiveRides();
+
+    await loadTrips();
+    flash(\`Rit opgeslagen ✓ — \${endKm - ride.start_km} km gereden\`);
+    navigate('trips');
+  } catch(e) {
+    flash('Fout bij opslaan: ' + e.message, 'error');
+  }
+};
+
+window.saveAdres = (v) => {
+  const saved = JSON.parse(localStorage.getItem('saved_addresses') || '[]');
+  if (v.length > 3 && !saved.includes(v)) { saved.unshift(v); localStorage.setItem('saved_addresses', JSON.stringify(saved.slice(0,30))); }
+};
+
 function renderForm() {
   const f = state.form;
   const km = f.odometer_start && f.odometer_end ? parseInt(f.odometer_end)-parseInt(f.odometer_start) : null;
