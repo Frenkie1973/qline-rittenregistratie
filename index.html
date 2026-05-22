@@ -512,27 +512,58 @@ async function autoFillLastOdometer(vehicleId) {
       await import('https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js');
     const { getApp } = await import('https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js');
     const db = getFirestore(getApp());
-    
-    // Haal de laatste rit op van deze gebruiker (of dit voertuig)
     const vId = vehicleId || state.form.vehicle_id;
-    let q;
-    if (vId) {
-      q = query(collection(db,'trips'), where('vehicle_id','==',vId), orderBy('trip_date','desc'), orderBy('created_at','desc'), limit(1));
-    } else {
-      q = query(collection(db,'trips'), where('user_id','==',state.user.uid), orderBy('trip_date','desc'), orderBy('created_at','desc'), limit(1));
-    }
+    if (!vId) return;
+
+    // Simpele query: alleen op vehicle_id + trip_date, geen compound index nodig
+    const q = query(
+      collection(db,'trips'),
+      where('vehicle_id','==',vId),
+      orderBy('trip_date','desc'),
+      limit(5)
+    );
     const snap = await getDocs(q);
     if (!snap.empty) {
-      const lastTrip = snap.docs[0].data();
-      if (lastTrip.odometer_end) {
-        state.form.odometer_start = String(lastTrip.odometer_end);
-        // Update het inputveld direct als het al in de DOM staat
+      // Pak de rit met de hoogste eindstand (meest recente)
+      let best = null;
+      snap.docs.forEach(d => {
+        const t = d.data();
+        if (t.odometer_end && (!best || t.odometer_end > best)) best = t.odometer_end;
+      });
+      if (best) {
+        state.form.odometer_start = String(best);
+        state.form.vehicle_id = vId;
         const inp = document.getElementById('inp-odo-start');
-        if (inp) inp.value = lastTrip.odometer_end;
+        if (inp) inp.value = best;
         updateKmDisplay();
       }
     }
-  } catch(e) { console.log('autoFill error:', e); }
+  } catch(e) {
+    // Als index ontbreekt, probeer alle ritten van gebruiker
+    try {
+      const { getFirestore, collection, query, where, orderBy, limit, getDocs } = 
+        await import('https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js');
+      const { getApp } = await import('https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js');
+      const db = getFirestore(getApp());
+      const vId = vehicleId || state.form.vehicle_id;
+      // Haal alle ritten op en filter lokaal
+      const q = query(collection(db,'trips'), where('vehicle_id','==',vId), limit(20));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        let best = null;
+        snap.docs.forEach(d => {
+          const t = d.data();
+          if (t.odometer_end && (!best || t.odometer_end > best)) best = t.odometer_end;
+        });
+        if (best) {
+          state.form.odometer_start = String(best);
+          const inp = document.getElementById('inp-odo-start');
+          if (inp) inp.value = best;
+          updateKmDisplay();
+        }
+      }
+    } catch(e2) { console.log('autoFill fallback error:', e2); }
+  }
 }
 
 function renderHeader() {
