@@ -201,18 +201,28 @@ function defaultForm() {
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
+// Timeout zodat spinner nooit eeuwig blijft draaien
+const authTimeout = setTimeout(() => {
+  if (state.loading) { state.loading = false; render(); }
+}, 8000);
+
 onAuthStateChanged(auth, async u => {
+  clearTimeout(authTimeout);
   state.user = u;
   if (u) {
-    const snap = await getDoc(doc(db,'users',u.uid));
-    if (!snap.exists()) {
-      await setDoc(doc(db,'users',u.uid),{email:u.email,full_name:u.displayName||u.email,role:'medewerker',created_at:serverTimestamp()});
-      state.profile = {email:u.email,full_name:u.email,role:'medewerker'};
-    } else {
-      state.profile = snap.data();
+    try {
+      const snap = await getDoc(doc(db,'users',u.uid));
+      if (!snap.exists()) {
+        await setDoc(doc(db,'users',u.uid),{email:u.email,full_name:u.displayName||u.email,role:'medewerker',created_at:serverTimestamp()});
+        state.profile = {email:u.email,full_name:u.email,role:'medewerker'};
+      } else {
+        state.profile = snap.data();
+      }
+      await loadVehicles();
+      await loadTrips();
+    } catch(e) {
+      console.error('Auth error:', e);
     }
-    await loadVehicles();
-    await loadTrips();
   }
   state.loading = false;
   render();
