@@ -87,7 +87,7 @@ textarea{resize:vertical;min-height:70px}
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js';
-import { getFirestore, collection, addDoc, getDocs, getDoc, doc, updateDoc, setDoc, query, where, orderBy, limit, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
+import { getFirestore, collection, addDoc, getDocs, getDoc, doc, updateDoc, setDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
 
 const FB = {
   apiKey: "AIzaSyAk4Xus-k0ZTCIMluh9QMslsg-I21uMoDQ",
@@ -501,10 +501,12 @@ function tripRow(t, showApprove) {
     </div>
     <div style="text-align:right;flex-shrink:0">
       <div style="font-size:20px;font-weight:700;color:var(--red)">${t.km_total||0} km</div>
-      ${isAdmin()&&t.status==='open'?`<div style="display:flex;gap:3px;margin-top:4px;justify-content:flex-end">
-        <button class="btn bsu bsm" onclick="event.stopPropagation();approve('${t.id}','goedgekeurd')">✓</button>
-        <button class="btn bd bsm" onclick="event.stopPropagation();approve('${t.id}','afgekeurd')">✗</button>
-      </div>`:''}
+      <div style="display:flex;gap:3px;margin-top:4px;justify-content:flex-end">
+        ${isAdmin()&&t.status==='open'?`
+          <button class="btn bsu bsm" onclick="event.stopPropagation();approve('${t.id}','goedgekeurd')">✓</button>
+          <button class="btn bd bsm" onclick="event.stopPropagation();approve('${t.id}','afgekeurd')">✗</button>`:''}
+        ${isAdmin()?`<button class="btn bsm" onclick="event.stopPropagation();deleteTrip('${t.id}')" style="background:#888;color:#fff;border:none;border-radius:6px;cursor:pointer">🗑</button>`:''}
+      </div>
     </div>
   </div>
 </div>`;
@@ -527,10 +529,11 @@ function renderDetail() {
   return `
 <div class="ph">
   <div><div class="pt">Ritdetails</div></div>
-  <div style="display:flex;gap:6px">
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
     ${isAdmin()&&t.status==='open'?`
       <button class="btn bsu bsm" onclick="approve('${t.id}','goedgekeurd')">✓ Goed</button>
       <button class="btn bd bsm" onclick="approve('${t.id}','afgekeurd')">✗ Af</button>`:''}
+    ${isAdmin()?`<button class="btn bd bsm" onclick="deleteTrip('${t.id}')" style="background:#888">🗑 Verwijder</button>`:''}
   </div>
 </div>
 <div class="card">
@@ -719,6 +722,15 @@ window.addUser = async () => {
     flash('Gebruiker aangemaakt ✓');
     await loadUsers(); render();
   } catch(err) { flash('Fout: '+err.message,'error'); }
+};
+
+window.deleteTrip = async (id) => {
+  if (!confirm('Weet je zeker dat je deze rit wilt verwijderen? Dit kan niet ongedaan worden gemaakt.')) return;
+  await deleteDoc(doc(db,'trips',id));
+  S.trips = S.trips.filter(t => t.id !== id);
+  if (S.detailTrip?.id === id) { S.detailTrip = null; go('trips'); return; }
+  flash('Rit verwijderd');
+  render();
 };
 
 window.changeRole = async (id, role) => {
