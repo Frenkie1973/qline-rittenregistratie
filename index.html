@@ -572,10 +572,14 @@ function renderAdminVehicles() {
 <div class="card">
   <div class="ch">Voertuigen (${S.vehicles.length})</div>
   ${S.vehicles.map(v=>`
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #f0f0f0">
-    <div><span style="font-family:monospace;font-weight:700">${esc(v.license)}</span>
-    <span style="color:#888;font-size:12px;margin-left:8px">${esc(v.brand||'')} ${esc(v.model||'')}</span>
-    ${v.last_km?`<br><span style="font-size:11px;color:#aaa">Laatste: ${v.last_km} km · ${esc(v.last_addr||'')}</span>`:''}
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #f0f0f0">
+    <div style="flex:1">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-family:monospace;font-weight:700;font-size:15px">${esc(v.license)}</span>
+        <span style="color:#888;font-size:13px">${esc(v.brand||'')} ${esc(v.model||'')}</span>
+        ${v.last_km?`<span style="background:#f0f4ff;color:#1a3c8f;padding:3px 10px;border-radius:20px;font-size:13px;font-weight:600">📍 ${v.last_km} km</span>`:'<span style="color:#ccc;font-size:12px">nog geen ritten</span>'}
+      </div>
+      ${v.last_addr?`<div style="font-size:12px;color:#aaa;margin-top:4px">Laatste locatie: ${esc(v.last_addr)} · ${esc(v.last_date||'')}</div>`:''}
     </div>
   </div>`).join('')}
 </div>`;
