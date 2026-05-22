@@ -270,9 +270,11 @@ function renderDash() {
 
   const openList = S.trips.filter(t=>t.status==='open').slice(0,5);
 
+  const hr = new Date().getHours();
+  const groet = hr < 12 ? 'Goedemorgen' : hr < 18 ? 'Goedemiddag' : 'Goedenavond';
   return `
 <div class="ph">
-  <div><div class="pt">Goedemorgen, ${esc(S.profile?.full_name?.split(' ')[0]||'')}</div>
+  <div><div class="pt">${groet}, ${esc(S.profile?.full_name?.split(' ')[0]||'')}</div>
   <div class="ps">${now.toLocaleDateString('nl-NL',{month:'long',year:'numeric'})}</div></div>
   <div style="display:flex;gap:6px">
     <button class="btn bs bsm" onclick="exportCSV()">CSV</button>
