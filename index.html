@@ -369,6 +369,8 @@ async function saveTrip() {
     localStorage.setItem('last_odometer_end', String(payload.odometer_end));
     localStorage.setItem('last_vehicle_id', payload.vehicle_id);
     state.editId = null;
+    state._lastSavedPayload = payload;
+    state._savedOk = true;
     state.form = defaultForm();
     flash('Rit opgeslagen ✓');
     navigate('trips');
@@ -742,12 +744,14 @@ function renderForm() {
     <div class="card-body">
       <div class="form-row-3">
         <div class="form-group"><label>Beginstand *</label>
-          <input type="number" value="${f.odometer_start}" placeholder="km" oninput="setF('odometer_start',this.value)"/></div>
+          <input type="number" id="inp-odo-start" value="${f.odometer_start}" placeholder="km"
+            oninput="state.form.odometer_start=this.value;updateKmDisplay()"/></div>
         <div class="form-group"><label>Eindstand *</label>
-          <input type="number" value="${f.odometer_end}" placeholder="km" oninput="setF('odometer_end',this.value)"/></div>
+          <input type="number" id="inp-odo-end" value="${f.odometer_end}" placeholder="km"
+            oninput="state.form.odometer_end=this.value;updateKmDisplay()"/></div>
         <div class="form-group"><label>Totaal</label>
-          <div class="km-display ${kmErr?'error':''}">
-            <span>${km !== null ? km : '—'}</span>
+          <div id="km-display-wrap"  class="km-display ${kmErr?'error':''}">
+            <span id="km-value">${km !== null ? km : '—'}</span>
             <small>km</small>
           </div></div>
       </div>
@@ -770,7 +774,7 @@ function renderForm() {
         <div id="sug-arrival" style="display:none;position:absolute;background:#fff;border:1px solid #ddd;border-radius:8px;z-index:999;width:100%;max-height:150px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
       </div>
       <div class="form-group"><label>Doel / klant / project *</label>
-        <input type="text" value="${f.purpose}" oninput="setF('purpose',this.value)"/></div>
+        <input type="text" id="inp-purpose" value="${f.purpose}" oninput="state.form.purpose=this.value" onblur="state.form.purpose=this.value"/></div>
     </div>
   </div>
 
@@ -791,9 +795,9 @@ function renderForm() {
       </div>
       ${f.detour ? `
       <div class="form-group"><label>Reden afwijking</label>
-        <textarea oninput="setF('detour_reason',this.value)">${f.detour_reason}</textarea></div>
+        <textarea id="inp-detour-reason" oninput="state.form.detour_reason=this.value" onblur="state.form.detour_reason=this.value">${f.detour_reason}</textarea></div>
       <div class="form-group"><label>Privé-omrijkilometers</label>
-        <input type="number" value="${f.private_km}" oninput="setF('private_km',this.value)"/></div>
+        <input type="number" id="inp-private-km" value="${f.private_km}" oninput="state.form.private_km=this.value"/></div>
       ` : ''}
     </div>
   </div>
@@ -802,7 +806,7 @@ function renderForm() {
     <div class="card-header">Extra</div>
     <div class="card-body">
       <div class="form-group"><label>Opmerkingen</label>
-        <textarea oninput="setF('notes',this.value)">${f.notes}</textarea></div>
+        <textarea id="inp-notes" oninput="state.form.notes=this.value" onblur="state.form.notes=this.value">${f.notes}</textarea></div>
       <div class="form-group">
         <label>Handtekening bestuurder</label>
         <canvas id="sig-canvas"></canvas>
@@ -843,6 +847,23 @@ window.setF = (k,v) => {
 window.doSave  = () => saveTrip();
 window.clearSig = clearSig;
 
+// Update km display zonder re-render
+window.updateKmDisplay = () => {
+  const s = parseInt(state.form.odometer_start);
+  const e = parseInt(state.form.odometer_end);
+  const el = document.getElementById('km-value');
+  const wrap = document.getElementById('km-display');
+  if (!el) return;
+  if (!isNaN(s) && !isNaN(e)) {
+    const km = e - s;
+    el.textContent = km;
+    if (wrap) wrap.className = 'km-display' + (km < 0 ? ' error' : '');
+  } else {
+    el.textContent = '—';
+    if (wrap) wrap.className = 'km-display';
+  }
+};
+
 // Adres autocomplete
 window.showSuggestions = (field, val) => {
   if (!val || val.length < 2) { hideSuggestions(field); return; }
@@ -870,23 +891,31 @@ window.pickAddress = (field, val) => {
 
 // Retourrit: wissel van/naar adres en begin bij huidige eindstand
 window.doSaveAndReturn = async () => {
+  // Bewaar huidige formulier data VOOR het opslaan
+  const prevForm = { ...state.form };
+  state._savedOk = false;
   await saveTrip();
-  // Na opslaan: maak retourrit met omgekeerde adressen
-  const prev = state.form;
+  // Wacht even zodat state._savedOk gezet is
+  await new Promise(r => setTimeout(r, 100));
+  if (!state._savedOk) return; // opslaan mislukt
+  // Maak retourrit
   const lastEnd = localStorage.getItem('last_odometer_end') || '';
+  const lastVehicle = localStorage.getItem('last_vehicle_id') || '';
   state.form = {
     ...defaultForm(),
-    vehicle_id: localStorage.getItem('last_vehicle_id') || '',
+    vehicle_id: lastVehicle,
     odometer_start: lastEnd,
-    departure_address: prev.arrival_address || '',
-    arrival_address:  prev.departure_address || '',
-    purpose:    prev.purpose || '',
-    trip_type:  prev.trip_type || 'Zakelijk',
+    odometer_end: '',
+    departure_address: prevForm.arrival_address || '',
+    arrival_address:  prevForm.departure_address || '',
+    purpose:    prevForm.purpose || '',
+    trip_type:  prevForm.trip_type || 'Zakelijk',
   };
   state.editId = null;
   state.page = 'new';
+  state._savedOk = false;
   render();
-  flash('Retourrit aangemaakt — controleer en sla op', 'info');
+  flash('Retourrit klaar — controleer eindstand en sla op', 'info');
 };
 
 // ── Detail ───────────────────────────────────────────────────────────────────
