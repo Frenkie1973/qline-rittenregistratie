@@ -443,6 +443,27 @@ function renderAankomst() {
 </div></div>
 <button class="btn bs bw" onclick="go('dash')" style="margin-top:8px">Terug</button>`;
 
+  // Als er meerdere actieve ritten zijn, toon keuze
+  if (actief.length > 1) {
+    return `
+<div class="ph"><div><div class="pt">📍 Welke auto?</div><div class="ps">Meerdere ritten actief</div></div></div>
+${actief.map(vx => {
+  const ride = S.activeRides[vx.id];
+  return `<div class="card" style="margin-bottom:10px">
+    <div class="cb">
+      <p style="font-weight:700;font-size:16px">${esc(vx.license)} · ${esc(vx.brand||'')}</p>
+      <p style="font-size:13px;color:#888;margin:4px 0">Van: ${esc(ride.start_addr||'?')} · ${ride.start_km} km</p>
+      <p style="font-size:13px;color:#888;margin-bottom:12px">Doel: ${esc(ride.purpose||'')}</p>
+      <div style="display:flex;gap:8px">
+        <button class="btn bp" style="flex:1;padding:12px" onclick="selectAankomst('${vx.id}')">📍 Aankomst</button>
+        <button class="btn" style="background:#888;color:#fff;padding:12px 16px;border-radius:8px;cursor:pointer;border:none" onclick="annuleerRit('${vx.id}')">✕ Annuleer rit</button>
+      </div>
+    </div>
+  </div>`;
+}).join('')}
+<button class="btn bs bw" onclick="go('dash')" style="margin-top:8px">Terug</button>`;
+  }
+
   const v = actief[0];
   const ride = S.activeRides[v.id];
 
@@ -492,7 +513,8 @@ function renderAankomst() {
 </div>
 
 <button class="btn bp bw" style="font-size:18px;padding:18px;margin-bottom:8px" onclick="stopRit()">📍 Opslaan & klaar</button>
-<button class="btn bs bw" onclick="go('dash')">Annuleren</button>`;
+<button class="btn bs bw" style="margin-bottom:8px" onclick="go('dash')">← Terug</button>
+<button class="btn bw" style="background:#fff;color:#e74c3c;border:1px solid #e74c3c;padding:12px" onclick="annuleerRit(document.getElementById('avid')?.value)">✕ Rit annuleren (niet opslaan)</button>`;
 }
 
 // ── Trips list ────────────────────────────────────────────────────────────────
