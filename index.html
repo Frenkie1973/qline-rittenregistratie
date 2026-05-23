@@ -142,7 +142,20 @@ async function loadAR() {
     const snap = await getDocs(collection(db,'active_rides'));
     S.activeRides = {};
     snap.docs.forEach(d => { S.activeRides[d.data().vehicle_id] = {...d.data(), _docId: d.id}; });
-  } catch(e) { S.activeRides = {}; }
+    // Migreer oude localStorage ritten naar Firebase
+    const oldAR = JSON.parse(localStorage.getItem('qline_ar')||'{}');
+    for (const [vid, ride] of Object.entries(oldAR)) {
+      if (!S.activeRides[vid] && ride.start_km) {
+        // Zet over naar Firebase
+        const ref = await addDoc(collection(db,'active_rides'), {...ride, migrated: true, created_at: serverTimestamp()});
+        S.activeRides[vid] = {...ride, _docId: ref.id};
+      }
+    }
+    if (Object.keys(oldAR).length > 0) localStorage.removeItem('qline_ar');
+  } catch(e) { 
+    // Fallback naar localStorage
+    try { S.activeRides = JSON.parse(localStorage.getItem('qline_ar')||'{}'); } catch(e2) { S.activeRides = {}; }
+  }
   // Adres geheugen
   const saved = JSON.parse(localStorage.getItem('qline_addr')||'[]');
   const qline = 'Haarbrinksweg 47, Geesteren';
@@ -732,7 +745,10 @@ function renderAdminActive() {
   const actief = Object.entries(S.activeRides);
   return `
 <div class="card">
-  <div class="ch">Actieve ritten (${actief.length})</div>
+  <div class="ch" style="display:flex;align-items:center;justify-content:space-between">
+    <span>Actieve ritten (${actief.length})</span>
+    ${actief.length>0?'<button class="btn bd bsm" onclick="resetAlleRitten()">Reset alles</button>':''}
+  </div>
   ${actief.length===0?'<div class="empty"><div class="ei">✅</div><p>Geen actieve ritten</p></div>':''}
   ${actief.map(([vid, ride]) => {
     const v = S.vehicles.find(x=>x.id===vid);
