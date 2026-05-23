@@ -138,10 +138,23 @@ function go(page, extra={}) {
 
 function loadAR() {
   try { S.activeRides = JSON.parse(localStorage.getItem('qline_ar')||'{}'); } catch(e) { S.activeRides = {}; }
-  // Zorg dat Q-Line adres altijd in de lijst staat
   const saved = JSON.parse(localStorage.getItem('qline_addr')||'[]');
   const qline = 'Haarbrinksweg 47, Geesteren';
   if (!saved.includes(qline)) { saved.unshift(qline); localStorage.setItem('qline_addr', JSON.stringify(saved)); }
+}
+
+function getLastVehicle() { return localStorage.getItem('qline_last_vehicle')||''; }
+function setLastVehicle(vid) { localStorage.setItem('qline_last_vehicle', vid); }
+
+function getVehicleKm(vid) {
+  try { return JSON.parse(localStorage.getItem('qline_vkm')||'{}')[vid]||null; } catch(e) { return null; }
+}
+function setVehicleKm(vid, km, addr) {
+  try {
+    const vkm = JSON.parse(localStorage.getItem('qline_vkm')||'{}');
+    vkm[vid] = {km, addr, date: new Date().toISOString().slice(0,10)};
+    localStorage.setItem('qline_vkm', JSON.stringify(vkm));
+  } catch(e) {}
 }
 
 function getSavedAddresses() {
@@ -343,12 +356,23 @@ ${pvArr.length>0?`
 
 // ── Rijden ────────────────────────────────────────────────────────────────────
 function renderRijden() {
+  const lastVid = getLastVehicle();
   const vopts = S.vehicles.map(v => {
     const act = S.activeRides[v.id];
+    // Haal km op: eerst uit Firebase (v.last_km), anders uit localStorage
+    const lsData = getVehicleKm(v.id);
+    if (!v.last_km && lsData) { v.last_km = lsData.km; v.last_addr = lsData.addr; }
     const km = v.last_km?' ('+v.last_km+' km)':'';
     const lbl = act ? '⚠️ '+v.license+' · IN GEBRUIK' : v.license+(v.brand?' · '+v.brand:'')+km;
-    return `<option value="${v.id}">${esc(lbl)}</option>`;
+    const sel = v.id === lastVid ? 'selected' : '';
+    return `<option value="${v.id}" ${sel}>${esc(lbl)}</option>`;
   }).join('');
+
+  // Auto-trigger voor laatste voertuig na render
+  setTimeout(() => {
+    const sel = document.getElementById('rv');
+    if (sel && sel.value) onVehicleSelect(sel.value);
+  }, 100);
 
   return `
 <div class="ph"><div><div class="pt">🚗 Ik ga rijden</div><div class="ps">Kies voertuig en bevestig vertrek</div></div></div>
@@ -365,8 +389,11 @@ function renderRijden() {
     <div id="rinfo" style="display:none">
       <div class="alert ai" id="rstatus">Laden...</div>
       <div class="fg awrap"><label>Vertrekadres</label>
-        <input type="text" id="rfrom" placeholder="Automatisch ingevuld of typ adres" style="font-size:14px" autocomplete="off"
-          oninput="showAddrSug('rfrom',this.value)" onfocus="showAddrSug('rfrom',this.value)" onblur="setTimeout(()=>hideAddrSug('rfrom'),200)"/>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="rfrom" placeholder="Automatisch ingevuld of typ adres" style="font-size:14px;flex:1" autocomplete="off"
+            oninput="showAddrSug('rfrom',this.value)" onfocus="showAddrSug('rfrom',this.value)" onblur="setTimeout(()=>hideAddrSug('rfrom'),200)"/>
+          <button type="button" onclick="getGPS('rfrom')" style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:18px;flex-shrink:0" title="GPS locatie bepalen">📍</button>
+        </div>
         <div id="sug-rfrom" class="adrop" style="display:none"></div>
       </div>
       <div class="fg"><label style="font-weight:700">Beginstand km *</label><input type="number" id="rkm" placeholder="km stand" style="font-size:20px;padding:14px;font-weight:700"/></div>
@@ -410,8 +437,11 @@ function renderAankomst() {
       Doel: ${esc(ride.purpose||'')}
     </div>
     <div class="fg awrap"><label style="font-weight:700">Aankomstadres *</label>
-        <input type="text" id="aaddr" placeholder="Straat, huisnummer, plaats" style="font-size:14px" autocomplete="off"
-          oninput="showAddrSug('aaddr',this.value)" onfocus="showAddrSug('aaddr',this.value)" onblur="setTimeout(()=>hideAddrSug('aaddr'),200)"/>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="aaddr" placeholder="Straat, huisnummer, plaats" style="font-size:14px;flex:1" autocomplete="off"
+            oninput="showAddrSug('aaddr',this.value)" onfocus="showAddrSug('aaddr',this.value)" onblur="setTimeout(()=>hideAddrSug('aaddr'),200)"/>
+          <button type="button" onclick="getGPS('aaddr')" style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:18px;flex-shrink:0" title="GPS locatie bepalen">📍</button>
+        </div>
         <div id="sug-aaddr" class="adrop" style="display:none"></div>
       </div>
     <div class="fg"><label style="font-weight:700">Eindstand km *</label><input type="number" id="akm" placeholder="km stand" style="font-size:20px;padding:14px;font-weight:700"/><p style="font-size:12px;color:#888;margin-top:4px">Beginstand was: ${ride.start_km} km</p></div>
@@ -747,6 +777,57 @@ window.changeRole = async (id, role) => {
 };
 
 // ── Rijden acties ─────────────────────────────────────────────────────────────
+window.getGPS = (fieldId) => {
+  const inp = document.getElementById(fieldId);
+  if (!inp) return;
+  const orig = inp.placeholder;
+  inp.placeholder = '📍 Locatie bepalen...';
+  inp.disabled = true;
+
+  if (!navigator.geolocation) {
+    inp.placeholder = 'GPS niet beschikbaar';
+    inp.disabled = false;
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      try {
+        // Gebruik OpenStreetMap Nominatim voor gratis reverse geocoding
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=nl`,
+          {headers: {'User-Agent': 'QLine-Rittenregistratie'}}
+        );
+        const data = await res.json();
+        const a = data.address;
+        // Bouw een mooi adres op
+        const straat = (a.road||a.pedestrian||a.path||'');
+        const nr = a.house_number||'';
+        const plaats = a.city||a.town||a.village||a.hamlet||'';
+        const adres = [straat+(nr?' '+nr:''), plaats].filter(Boolean).join(', ');
+        inp.value = adres;
+        inp.disabled = false;
+        inp.placeholder = orig;
+        // Sla op in geheugen
+        if (fieldId === 'rfrom') { if(window._state) window._state.form = window._state.form||{}; }
+        saveAddress(adres);
+      } catch(e) {
+        inp.value = lat.toFixed(5)+', '+lon.toFixed(5);
+        inp.disabled = false;
+        inp.placeholder = orig;
+      }
+    },
+    (err) => {
+      inp.placeholder = 'GPS geweigerd - typ handmatig';
+      inp.disabled = false;
+      setTimeout(() => { inp.placeholder = orig; }, 3000);
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+};
+
 window.showAddrSug = (fieldId, val) => {
   const drop = document.getElementById('sug-'+fieldId);
   if (!drop) return;
@@ -800,6 +881,7 @@ window.startRit = () => {
   if (!vid)     { flash('Kies een voertuig','error'); return; }
   if (!km)      { flash('Vul de beginstand in','error'); return; }
   if (!purpose) { flash('Vul het doel in','error'); return; }
+  setLastVehicle(vid);
   S.activeRides[vid] = {
     vehicle_id: vid,
     start_km: parseInt(km),
@@ -851,6 +933,7 @@ window.stopRit = async () => {
       created_at: serverTimestamp(),
     });
     if (v) { v.last_km=endKm; v.last_addr=addr; v.last_date=ride.trip_date; }
+    setVehicleKm(vid, endKm, addr);
     delete S.activeRides[vid];
     saveAR();
     await loadTrips();
