@@ -136,11 +136,33 @@ function go(page, extra={}) {
   render();
 }
 
-function loadAR() {
-  try { S.activeRides = JSON.parse(localStorage.getItem('qline_ar')||'{}'); } catch(e) { S.activeRides = {}; }
+async function loadAR() {
+  // Laad actieve ritten uit Firebase
+  try {
+    const snap = await getDocs(collection(db,'active_rides'));
+    S.activeRides = {};
+    snap.docs.forEach(d => { S.activeRides[d.data().vehicle_id] = {...d.data(), _docId: d.id}; });
+  } catch(e) { S.activeRides = {}; }
+  // Adres geheugen
   const saved = JSON.parse(localStorage.getItem('qline_addr')||'[]');
   const qline = 'Haarbrinksweg 47, Geesteren';
   if (!saved.includes(qline)) { saved.unshift(qline); localStorage.setItem('qline_addr', JSON.stringify(saved)); }
+}
+
+async function saveAR_start(vid, ride) {
+  // Sla nieuwe actieve rit op in Firebase
+  const ref = await addDoc(collection(db,'active_rides'), ride);
+  ride._docId = ref.id;
+  S.activeRides[vid] = ride;
+}
+
+async function saveAR_stop(vid) {
+  // Verwijder actieve rit uit Firebase
+  const ride = S.activeRides[vid];
+  if (ride?._docId) {
+    try { await deleteDoc(doc(db,'active_rides', ride._docId)); } catch(e) {}
+  }
+  delete S.activeRides[vid];
 }
 
 function getLastVehicle() { return localStorage.getItem('qline_last_vehicle')||''; }
@@ -649,7 +671,7 @@ function renderAdmin() {
   <button class="tb ${S.adminTab==='users'?'on':''}" onclick="setAdminTab('users')">👥 Gebruikers</button>
   <button class="tb ${S.adminTab==='approve'?'on':''}" onclick="setAdminTab('approve')">✅ Goedkeuren (${S.trips.filter(t=>t.status==='open').length})</button>
 </div>
-${S.adminTab==='vehicles'?renderAdminVehicles():S.adminTab==='users'?renderAdminUsers():renderAdminApprove()}`;
+${S.adminTab==='vehicles'?renderAdminVehicles():S.adminTab==='users'?renderAdminUsers():S.adminTab==='active'?renderAdminActive():renderAdminApprove()}`;
 }
 
 function renderAdminVehicles() {
@@ -703,6 +725,29 @@ function renderAdminUsers() {
       <option value="admin" ${u.role==='admin'?'selected':''}>Admin</option>
     </select>
   </div>`).join('')}
+</div>`;
+}
+
+function renderAdminActive() {
+  const actief = Object.entries(S.activeRides);
+  return `
+<div class="card">
+  <div class="ch">Actieve ritten (${actief.length})</div>
+  ${actief.length===0?'<div class="empty"><div class="ei">✅</div><p>Geen actieve ritten</p></div>':''}
+  ${actief.map(([vid, ride]) => {
+    const v = S.vehicles.find(x=>x.id===vid);
+    return `<div style="padding:14px 16px;border-bottom:1px solid #f0f0f0">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div>
+          <p style="font-weight:700;font-size:15px">${esc(v?.license||'?')} · ${esc(v?.brand||'')}</p>
+          <p style="font-size:13px;color:#666">Rijder: ${esc(ride.user_name||'')}</p>
+          <p style="font-size:13px;color:#666">Van: ${esc(ride.start_addr||'?')} · ${ride.start_km} km</p>
+          <p style="font-size:13px;color:#666">Doel: ${esc(ride.purpose||'')} · ${esc(ride.dep_time||'')}</p>
+        </div>
+        <button class="btn bd bsm" onclick="annuleerRit('${vid}')">✕ Annuleer</button>
+      </div>
+    </div>`;
+  }).join('')}
 </div>`;
 }
 
@@ -963,7 +1008,7 @@ window.onVehicleSelect = (vid) => {
   }
 };
 
-window.startRit = () => {
+window.startRit = async () => {
   const vid = document.getElementById('rv')?.value;
   const km = document.getElementById('rkm')?.value;
   const from = document.getElementById('rfrom')?.value;
@@ -974,7 +1019,7 @@ window.startRit = () => {
   if (!km)      { flash('Vul de beginstand in','error'); return; }
   if (!purpose) { flash('Vul het doel in','error'); return; }
   setLastVehicle(vid);
-  S.activeRides[vid] = {
+  const ride = {
     vehicle_id: vid,
     start_km: parseInt(km),
     start_addr: from||'',
@@ -983,8 +1028,9 @@ window.startRit = () => {
     trip_date: nowDate(),
     user_id: S.user.uid,
     user_name: S.profile?.full_name||S.user.email,
+    created_at: serverTimestamp(),
   };
-  saveAR();
+  await saveAR_start(vid, ride);
   flash('Goede reis! Druk op 📍 Aankomst als je er bent.');
   go('dash');
 };
@@ -1026,8 +1072,7 @@ window.stopRit = async () => {
     });
     if (v) { v.last_km=endKm; v.last_addr=addr; v.last_date=ride.trip_date; }
     setVehicleKm(vid, endKm, addr);
-    delete S.activeRides[vid];
-    saveAR();
+    await saveAR_stop(vid);
     await loadTrips();
     flash('Rit opgeslagen ✓ — '+(endKm-ride.start_km)+' km gereden');
     go('trips');
