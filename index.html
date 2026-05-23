@@ -357,59 +357,80 @@ ${pvArr.length>0?`
 // ── Rijden ────────────────────────────────────────────────────────────────────
 function renderRijden() {
   const lastVid = getLastVehicle();
-  const vopts = S.vehicles.map(v => {
-    const act = S.activeRides[v.id];
-    // Haal km op: eerst uit Firebase (v.last_km), anders uit localStorage
+  // Vul voertuig + km + adres alvast in vanuit cache
+  S.vehicles.forEach(v => {
     const lsData = getVehicleKm(v.id);
     if (!v.last_km && lsData) { v.last_km = lsData.km; v.last_addr = lsData.addr; }
-    const km = v.last_km?' ('+v.last_km+' km)':'';
-    const lbl = act ? '⚠️ '+v.license+' · IN GEBRUIK' : v.license+(v.brand?' · '+v.brand:'')+km;
-    const sel = v.id === lastVid ? 'selected' : '';
-    return `<option value="${v.id}" ${sel}>${esc(lbl)}</option>`;
+  });
+  const v = S.vehicles.find(x => x.id === lastVid) || S.vehicles[0];
+  const vopts = S.vehicles.map(vx => {
+    const act = S.activeRides[vx.id];
+    const km = vx.last_km ? ' ('+vx.last_km+' km)' : '';
+    const lbl = act ? '⚠️ '+vx.license+' · IN GEBRUIK' : vx.license+(vx.brand?' · '+vx.brand:'')+km;
+    const sel = vx.id === (v?.id||'') ? 'selected' : '';
+    return '<option value="'+vx.id+'" '+sel+'>'+esc(lbl)+'</option>';
   }).join('');
 
-  // Auto-trigger voor laatste voertuig na render
+  const startKm = v?.last_km || '';
+  const startAddr = v?.last_addr || '';
+
+  // GPS ophalen voor vertrekadres als het leeg is
   setTimeout(() => {
-    const sel = document.getElementById('rv');
-    if (sel && sel.value) onVehicleSelect(sel.value);
-  }, 100);
+    const inp = document.getElementById('rfrom');
+    if (inp && !inp.value) getGPS('rfrom');
+  }, 300);
 
   return `
-<div class="ph"><div><div class="pt">🚗 Ik ga rijden</div><div class="ps">Kies voertuig en bevestig vertrek</div></div></div>
+<div class="ph"><div><div class="pt">🚗 Vertrekken</div><div class="ps">Controleer en bevestig</div></div></div>
 <div class="card">
   <div class="ch">Voertuig</div>
   <div class="cb">
-    <div class="fg">
-      <label>Voertuig *</label>
-      <select id="rv" onchange="onVehicleSelect(this.value)" style="font-size:16px;padding:14px">
-        <option value="">— kies voertuig —</option>
-        ${vopts}
-      </select>
-    </div>
-    <div id="rinfo" style="display:none">
-      <div class="alert ai" id="rstatus">Laden...</div>
-      <div class="fg awrap"><label>Vertrekadres</label>
-        <div style="display:flex;gap:8px">
-          <input type="text" id="rfrom" placeholder="Automatisch ingevuld of typ adres" style="font-size:14px;flex:1" autocomplete="off"
-            oninput="showAddrSug('rfrom',this.value)" onfocus="showAddrSug('rfrom',this.value)" onblur="setTimeout(()=>hideAddrSug('rfrom'),200)"/>
-          <button type="button" onclick="getGPS('rfrom')" style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:18px;flex-shrink:0" title="GPS locatie bepalen">📍</button>
-        </div>
-        <div id="sug-rfrom" class="adrop" style="display:none"></div>
-      </div>
-      <div class="fg"><label style="font-weight:700">Beginstand km *</label><input type="number" id="rkm" placeholder="km stand" style="font-size:20px;padding:14px;font-weight:700"/></div>
-      <div class="fg"><label>Doel van de rit / klant *</label><input type="text" id="rpurpose" placeholder="bijv. klant bezoek, levering..." style="font-size:14px"/></div>
-      <div class="fg"><label>Type rit</label>
-        <select id="rtype" style="font-size:14px;padding:10px">
-          <option value="Zakelijk">Zakelijk</option>
-          <option value="Prive">Privé</option>
-        </select>
-      </div>
-      <div class="fg"><label>Vertrektijd</label><input type="time" id="rtime" value="${nowTime()}" style="font-size:14px"/></div>
-      <button class="btn bp bw" style="font-size:16px;padding:16px;margin-top:8px" onclick="startRit()">🚗 Vertrekken</button>
+    <select id="rv" onchange="onVehicleSelect(this.value)" style="font-size:16px;padding:14px;width:100%">
+      ${vopts}
+    </select>
+    <div id="rstatus" class="alert ai" style="margin-top:10px;display:${startKm?'block':'none'}">
+      Beginstand: <strong>${startKm} km</strong> · Laatste locatie: ${esc(startAddr)}
     </div>
   </div>
 </div>
-<button class="btn bs bw" onclick="go('dash')" style="margin-top:8px">Annuleren</button>`;
+
+<div class="card">
+  <div class="ch">Vertrekadres</div>
+  <div class="cb">
+    <div class="fg awrap">
+      <div style="display:flex;gap:8px">
+        <input type="text" id="rfrom" value="${esc(startAddr)}" placeholder="Bepalen via GPS..." style="font-size:14px;flex:1" autocomplete="off"
+          oninput="showAddrSug('rfrom',this.value)" onfocus="showAddrSug('rfrom',this.value)" onblur="setTimeout(()=>hideAddrSug('rfrom'),200)"/>
+        <button type="button" onclick="getGPS('rfrom')" style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:8px;padding:10px 14px;cursor:pointer;font-size:20px;flex-shrink:0">📍</button>
+      </div>
+      <div id="sug-rfrom" class="adrop" style="display:none"></div>
+    </div>
+    <div class="fg">
+      <label style="font-weight:700">Beginstand km *</label>
+      <input type="number" id="rkm" value="${startKm}" placeholder="km stand" style="font-size:22px;padding:14px;font-weight:700;text-align:center"/>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="ch">Rit info</div>
+  <div class="cb">
+    <div class="fg">
+      <label style="font-weight:700;font-size:15px">Doel / klant / project *</label>
+      <input type="text" id="rpurpose" placeholder="bijv. klant bezoek, levering, ophalen..." style="font-size:16px;padding:14px"/>
+    </div>
+    <div class="fg">
+      <label style="font-weight:700;font-size:15px">Type rit</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px">
+        <button id="btn-zakelijk" onclick="setTripType('Zakelijk')" class="btn" style="padding:16px;font-size:16px;background:var(--red);color:#fff;border-radius:10px">💼 Zakelijk</button>
+        <button id="btn-prive" onclick="setTripType('Prive')" class="btn" style="padding:16px;font-size:16px;background:#f0f0f0;color:#555;border-radius:10px">🏠 Privé</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<button class="btn bp bw" style="font-size:18px;padding:18px;margin-bottom:8px" onclick="startRit()">🚗 Vertrekken</button>
+<button class="btn bs bw" onclick="go('dash')">Annuleren</button>`;
 }
 
 // ── Aankomst ──────────────────────────────────────────────────────────────────
@@ -425,32 +446,53 @@ function renderAankomst() {
   const v = actief[0];
   const ride = S.activeRides[v.id];
 
+  // GPS automatisch ophalen bij openen
+  setTimeout(() => {
+    const inp = document.getElementById('aaddr');
+    if (inp && !inp.value) getGPS('aaddr');
+  }, 300);
+
   return `
-<div class="ph"><div><div class="pt">📍 Aangekomen</div><div class="ps">Vul aankomstgegevens in</div></div></div>
+<div class="ph"><div><div class="pt">📍 Aangekomen</div><div class="ps">${esc(v.license)} · ${esc(ride.purpose||'')}</div></div></div>
 <input type="hidden" id="avid" value="${v.id}"/>
+
 <div class="card" style="border-left:4px solid var(--red)">
-  <div class="ch">Rit ${esc(v.license)}${v.brand?' · '+esc(v.brand):''}</div>
-  <div class="cb">
-    <div class="alert ai" style="margin-bottom:16px">
-      🚗 Vertrek: <strong>${esc(ride.start_addr||'?')}</strong> om ${esc(ride.dep_time||'')}<br>
-      Beginstand: <strong>${ride.start_km} km</strong> &nbsp;|&nbsp; Rijder: ${esc(ride.user_name||'')}<br>
-      Doel: ${esc(ride.purpose||'')}
+  <div class="ch">Rit info</div>
+  <div class="cb" style="padding:12px 16px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
+      <div><span style="color:#888">Van</span><br><strong>${esc(ride.start_addr||'?')}</strong></div>
+      <div><span style="color:#888">Vertrek</span><br><strong>${esc(ride.dep_time||'')}</strong></div>
+      <div><span style="color:#888">Beginstand</span><br><strong>${ride.start_km} km</strong></div>
+      <div><span style="color:#888">Rijder</span><br><strong>${esc(ride.user_name?.split(' ')[0]||'')}</strong></div>
     </div>
-    <div class="fg awrap"><label style="font-weight:700">Aankomstadres *</label>
-        <div style="display:flex;gap:8px">
-          <input type="text" id="aaddr" placeholder="Straat, huisnummer, plaats" style="font-size:14px;flex:1" autocomplete="off"
-            oninput="showAddrSug('aaddr',this.value)" onfocus="showAddrSug('aaddr',this.value)" onblur="setTimeout(()=>hideAddrSug('aaddr'),200)"/>
-          <button type="button" onclick="getGPS('aaddr')" style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:18px;flex-shrink:0" title="GPS locatie bepalen">📍</button>
-        </div>
-        <div id="sug-aaddr" class="adrop" style="display:none"></div>
-      </div>
-    <div class="fg"><label style="font-weight:700">Eindstand km *</label><input type="number" id="akm" placeholder="km stand" style="font-size:20px;padding:14px;font-weight:700"/><p style="font-size:12px;color:#888;margin-top:4px">Beginstand was: ${ride.start_km} km</p></div>
-    <div class="fg"><label>Aankomsttijd</label><input type="time" id="atime" value="${nowTime()}" style="font-size:14px"/></div>
-    <div class="fg"><label>Opmerkingen</label><textarea id="anotes" rows="2" style="font-size:14px"></textarea></div>
-    <button class="btn bp bw" style="font-size:16px;padding:16px;margin-top:8px" onclick="stopRit()">📍 Aankomst bevestigen & opslaan</button>
   </div>
 </div>
-<button class="btn bs bw" onclick="go('dash')" style="margin-top:8px">Annuleren</button>`;
+
+<div class="card">
+  <div class="ch">Aankomstadres</div>
+  <div class="cb">
+    <div class="fg awrap">
+      <div style="display:flex;gap:8px">
+        <input type="text" id="aaddr" placeholder="Bepalen via GPS..." style="font-size:14px;flex:1" autocomplete="off"
+          oninput="showAddrSug('aaddr',this.value)" onfocus="showAddrSug('aaddr',this.value)" onblur="setTimeout(()=>hideAddrSug('aaddr'),200)"/>
+        <button type="button" onclick="getGPS('aaddr')" style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:8px;padding:10px 14px;cursor:pointer;font-size:20px;flex-shrink:0">📍</button>
+      </div>
+      <div id="sug-aaddr" class="adrop" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="ch">Eindstand km</div>
+  <div class="cb">
+    <input type="number" id="akm" placeholder="km stand" style="font-size:28px;padding:16px;font-weight:700;text-align:center;width:100%"/>
+    <p style="font-size:13px;color:#888;margin-top:6px;text-align:center">Beginstand was: <strong>${ride.start_km} km</strong></p>
+    <div id="km-diff" style="text-align:center;margin-top:8px;font-size:15px;color:#888"></div>
+  </div>
+</div>
+
+<button class="btn bp bw" style="font-size:18px;padding:18px;margin-bottom:8px" onclick="stopRit()">📍 Opslaan & klaar</button>
+<button class="btn bs bw" onclick="go('dash')">Annuleren</button>`;
 }
 
 // ── Trips list ────────────────────────────────────────────────────────────────
@@ -852,6 +894,34 @@ window.pickAddr = (fieldId, addr) => {
   if (inp) { inp.value = addr; hideAddrSug(fieldId); }
 };
 
+// Trip type knoppen
+let _tripType = 'Zakelijk';
+window.setTripType = (type) => {
+  _tripType = type;
+  const bz = document.getElementById('btn-zakelijk');
+  const bp = document.getElementById('btn-prive');
+  if (bz) bz.style.background = type==='Zakelijk' ? 'var(--red)' : '#f0f0f0';
+  if (bz) bz.style.color = type==='Zakelijk' ? '#fff' : '#555';
+  if (bp) bp.style.background = type==='Prive' ? '#4a1a6e' : '#f0f0f0';
+  if (bp) bp.style.color = type==='Prive' ? '#fff' : '#555';
+};
+
+// Live km verschil tonen bij aankomst
+document.addEventListener('input', e => {
+  if (e.target.id === 'akm') {
+    const el = document.getElementById('km-diff');
+    if (!el) return;
+    const vid = document.getElementById('avid')?.value;
+    const ride = vid ? S.activeRides[vid] : null;
+    const end = parseInt(e.target.value);
+    if (ride && !isNaN(end) && end > ride.start_km) {
+      el.innerHTML = '<span style="color:var(--red);font-weight:700;font-size:20px">' + (end - ride.start_km) + ' km gereden</span>';
+    } else {
+      el.innerHTML = '';
+    }
+  }
+});
+
 window.onVehicleSelect = (vid) => {
   const info = document.getElementById('rinfo');
   const status = document.getElementById('rstatus');
@@ -876,7 +946,7 @@ window.startRit = () => {
   const km = document.getElementById('rkm')?.value;
   const from = document.getElementById('rfrom')?.value;
   const purpose = document.getElementById('rpurpose')?.value;
-  const type = document.getElementById('rtype')?.value;
+  const type = _tripType || 'Zakelijk';
   const time = document.getElementById('rtime')?.value;
   if (!vid)     { flash('Kies een voertuig','error'); return; }
   if (!km)      { flash('Vul de beginstand in','error'); return; }
