@@ -471,7 +471,7 @@ function renderRijden() {
   </div>
 </div>
 
-<button class="btn bp bw" style="font-size:18px;padding:18px;margin-bottom:8px" onclick="startRit()">🚗 Vertrekken</button>
+<button class="btn bp bw" style="font-size:18px;padding:18px;margin-bottom:8px" onclick="startRitFromForm()">🚗 Vertrekken</button>
 <button class="btn bs bw" onclick="go('dash')">Annuleren</button>`;
 }
 
@@ -1031,13 +1031,23 @@ window.onVehicleSelect = (vid) => {
   }
 };
 
-window.startRit = async () => {
+window.startRitFromForm = async () => {
   const vid = document.getElementById('rv')?.value;
   const km = document.getElementById('rkm')?.value;
   const from = document.getElementById('rfrom')?.value;
   const purpose = document.getElementById('rpurpose')?.value;
-  const type = _tripType || 'Zakelijk';
-  const time = document.getElementById('rtime')?.value;
+  const time = document.getElementById('rtime')?.value || nowTime();
+  await startRit(vid, km, from, purpose, _tripType || 'Zakelijk', time);
+};
+
+window.startRit = async (vid, km, from, purpose, type, time) => {
+  // Fallback: lees uit DOM als geen parameters
+  if (!vid) vid = document.getElementById('rv')?.value;
+  if (!km) km = document.getElementById('rkm')?.value;
+  if (!from) from = document.getElementById('rfrom')?.value;
+  if (!purpose) purpose = document.getElementById('rpurpose')?.value;
+  if (!time) time = document.getElementById('rtime')?.value || nowTime();
+  if (!type) type = _tripType || 'Zakelijk';
   if (!vid)     { flash('Kies een voertuig','error'); return; }
   if (!km)      { flash('Vul de beginstand in','error'); return; }
   if (!purpose) { flash('Vul het doel in','error'); return; }
