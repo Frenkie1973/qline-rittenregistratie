@@ -259,6 +259,13 @@ async function loadVehicleStatus() {
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function render() {
+  window.S = S; // Maak state globaal toegankelijk voor onclick handlers
+  window.db = db;
+  window.addDoc = addDoc;
+  window.collection = collection;
+  window.deleteDoc = deleteDoc;
+  window.doc = doc;
+  window.serverTimestamp = serverTimestamp;
   if (S.loading) { R.innerHTML = '<div class="spin"><div class="sr"></div></div>'; return; }
   if (!S.user)   { R.innerHTML = renderLogin(); bindLogin(); return; }
   R.innerHTML = renderShell();
