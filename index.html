@@ -1080,6 +1080,15 @@ window.startRit = async (vid, km, from, purpose, type, time) => {
   go('dash');
 };
 
+window.stopRitFromForm = async () => {
+  const vid   = document.getElementById('avid')?.value;
+  const endKm = parseInt(S.aankomst.km || document.getElementById('akm')?.value || '0');
+  const addr  = S.aankomst.addr || document.getElementById('aaddr')?.value?.trim() || '';
+  const time  = document.getElementById('atime')?.value || nowTime();
+  const notes = S.aankomst.notes || '';
+  await stopRit(vid, endKm, addr, time, notes);
+};
+
 window.stopRit = async () => {
   const vid = document.getElementById('avid')?.value;
   const endKm = parseInt(document.getElementById('akm')?.value||0);
