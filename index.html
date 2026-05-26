@@ -416,11 +416,7 @@ function renderRijden() {
   const startKm = v?.last_km || '';
   const startAddr = v?.last_addr || '';
 
-  // GPS ophalen voor vertrekadres als het leeg is
-  setTimeout(() => {
-    const inp = document.getElementById('rfrom');
-    if (inp && !inp.value) getGPS('rfrom');
-  }, 300);
+  // GPS NIET automatisch - alleen als gebruiker op 📍 klikt
 
   return `
 <div class="ph"><div><div class="pt">🚗 Vertrekken</div><div class="ps">Controleer en bevestig</div></div></div>
@@ -509,11 +505,8 @@ ${actief.map(vx => {
   const v = actief[0];
   const ride = S.activeRides[v.id];
 
-  // GPS automatisch ophalen bij openen
-  setTimeout(() => {
-    const inp = document.getElementById('aaddr');
-    if (inp && !inp.value) getGPS('aaddr');
-  }, 300);
+  // GPS NIET automatisch - alleen als gebruiker op 📍 klikt
+  // (auto-GPS veroorzaakte re-render die velden leegmaakte)
 
   return `
 <div class="ph"><div><div class="pt">📍 Aangekomen</div><div class="ps">${esc(v.license)} · ${esc(ride.purpose||'')}</div></div></div>
