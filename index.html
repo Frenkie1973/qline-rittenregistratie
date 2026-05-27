@@ -417,7 +417,8 @@ function renderRijden() {
   }).join('');
 
   const startKm = v?.last_km || '';
-  const startAddr = v?.last_addr || '';
+  // Haal opgeslagen adres op: eerst localStorage, dan Firebase last_addr
+  const startAddr = (v ? localStorage.getItem('qline_last_addr_' + v.id) : null) || v?.last_addr || '';
 
   // GPS NIET automatisch - alleen als gebruiker op 📍 klikt
 
@@ -1081,14 +1082,22 @@ window.onVehicleSelect = (vid) => {
   if (!info || !vid) { if(info) info.style.display='none'; return; }
   info.style.display = 'block';
   const v = S.vehicles.find(x=>x.id===vid);
-  if (v?.last_km) {
-    kmInp.value = v.last_km;
-    fromInp.value = v.last_addr||'';
-    status.innerHTML = 'Laatste rit: <strong>'+(v.last_date||'')+'</strong> · Eindstand: <strong>'+v.last_km+' km</strong><br>Laatste locatie: '+(v.last_addr||'onbekend');
+  const lsKm = getVehicleKm(vid);
+  const savedAddr = localStorage.getItem('qline_last_addr_' + vid);
+  const lastKm = v?.last_km || lsKm?.km || '';
+  const lastAddr = savedAddr || v?.last_addr || lsKm?.addr || '';
+  if (lastKm) {
+    kmInp.value = lastKm;
+    fromInp.value = lastAddr;
+    S.vertrek.km = String(lastKm);
+    S.vertrek.addr = lastAddr;
+    if (status) status.innerHTML = 'Eindstand: <strong>'+lastKm+' km</strong> · Laatste locatie: <strong>'+(lastAddr||'onbekend')+'</strong>';
   } else {
     kmInp.value = '';
     fromInp.value = '';
-    status.innerHTML = 'Eerste rit voor dit voertuig — vul de beginstand in.';
+    S.vertrek.km = '';
+    S.vertrek.addr = '';
+    if (status) status.innerHTML = 'Eerste rit voor dit voertuig — vul de beginstand in.';
   }
 };
 
@@ -1243,6 +1252,8 @@ window.stopRit = async (vid, endKm, addr, time, notes) => {
     });
     if (v) { v.last_km=endKm; v.last_addr=addr; v.last_date=ride.trip_date; }
     setVehicleKm(vid, endKm, addr);
+    // Onthoud aankomstadres als vertrekadres voor volgende rit
+    localStorage.setItem('qline_last_addr_' + vid, addr);
     await saveAR_stop(vid);
     await loadTrips();
     flash('Rit opgeslagen ✓ — '+(endKm-ride.start_km)+' km gereden');
