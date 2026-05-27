@@ -1151,6 +1151,34 @@ window.herbereken = async () => {
   if (addr) await berekenKmNaInvoer(addr);
 };
 
+window.annuleerRit = async (vid) => {
+  if (!vid) { flash('Geen actieve rit gevonden', 'error'); return; }
+  if (!confirm('Rit annuleren? De rit wordt NIET opgeslagen.')) return;
+  // Verwijder uit Firebase
+  const ride = S.activeRides[vid];
+  if (ride?._docId) {
+    try { await deleteDoc(doc(db, 'active_rides', ride._docId)); } catch(e) {}
+  } else {
+    // Zoek op vehicle_id
+    try {
+      const snap = await getDocs(query(collection(db,'active_rides'), where('vehicle_id','==',vid)));
+      for (const d of snap.docs) await deleteDoc(doc(db,'active_rides',d.id));
+    } catch(e) {}
+  }
+  delete S.activeRides[vid];
+  flash('Rit geannuleerd');
+  go('dash');
+};
+
+window.resetAlleRitten = async () => {
+  if (!confirm('Alle actieve ritten resetten?')) return;
+  const snap = await getDocs(collection(db,'active_rides'));
+  for (const d of snap.docs) await deleteDoc(doc(db,'active_rides',d.id));
+  S.activeRides = {};
+  flash('Alle actieve ritten gereset');
+  go('dash');
+};
+
 window.stopRitFromForm = async () => {
   const vid   = document.getElementById('avid')?.value;
   const endKm = parseInt(S.aankomst.km || document.getElementById('akm')?.value || '0');
