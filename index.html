@@ -536,7 +536,7 @@ ${actief.map(vx => {
     <div class="fg awrap">
       <div style="display:flex;gap:8px">
         <input type="text" id="aaddr" placeholder="Bepalen via GPS..." style="font-size:14px;flex:1" autocomplete="off"
-          oninput="S.aankomst.addr=this.value;showAddrSug('aaddr',this.value)" onfocus="showAddrSug('aaddr',this.value)" onblur="setTimeout(()=>hideAddrSug('aaddr'),200)"/>
+          oninput="S.aankomst.addr=this.value;showAddrSug('aaddr',this.value)" onfocus="showAddrSug('aaddr',this.value)" onblur="setTimeout(()=>hideAddrSug('aaddr'),200);berekenKmNaInvoer(this.value)"/>
         <button type="button" onclick="getGPS('aaddr')" style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:8px;padding:10px 14px;cursor:pointer;font-size:20px;flex-shrink:0">📍</button>
       </div>
       <div id="sug-aaddr" class="adrop" style="display:none"></div>
@@ -545,11 +545,23 @@ ${actief.map(vx => {
 </div>
 
 <div class="card">
-  <div class="ch">Eindstand km</div>
+  <div class="ch">Gereden kilometers</div>
   <div class="cb">
-    <input type="number" id="akm" placeholder="km stand" style="font-size:28px;padding:16px;font-weight:700;text-align:center;width:100%" oninput="S.aankomst.km=this.value;updateKmDiff(this.value)"/>
-    <p style="font-size:13px;color:#888;margin-top:6px;text-align:center">Beginstand was: <strong>${ride.start_km} km</strong></p>
-    <div id="km-diff" style="text-align:center;margin-top:8px;font-size:15px;color:#888"></div>
+    <div id="km-auto" style="text-align:center;padding:12px 0">
+      <div style="font-size:13px;color:#888;margin-bottom:8px">Automatisch berekend via route</div>
+      <div id="km-berekend" style="font-size:36px;font-weight:700;color:var(--red)">—</div>
+      <div style="font-size:12px;color:#aaa;margin-top:4px">km gereden</div>
+      <button type="button" onclick="herbereken()" style="margin-top:8px;background:#f0f4ff;border:1px solid #c0ccee;border-radius:8px;padding:8px 16px;cursor:pointer;font-size:13px">🔄 Herbereken</button>
+    </div>
+    <div style="margin-top:12px;border-top:1px solid #f0f0f0;padding-top:12px">
+      <details>
+        <summary style="font-size:12px;color:#aaa;cursor:pointer">Handmatig invoeren</summary>
+        <div style="margin-top:8px">
+          <input type="number" id="akm" placeholder="km stand (optioneel)" style="font-size:16px;padding:12px;width:100%;text-align:center" oninput="S.aankomst.km=this.value"/>
+          <p style="font-size:11px;color:#aaa;margin-top:4px;text-align:center">Beginstand: <strong>${ride.start_km} km</strong></p>
+        </div>
+      </details>
+    </div>
   </div>
 </div>
 
@@ -985,6 +997,38 @@ window.pickAddr = (fieldId, addr) => {
 
 // Trip type knoppen
 let _tripType = 'Zakelijk';
+// Bereken rijafstand via OSRM (gratis, open source)
+window.calculateRouteKm = async (fromAddr, toAddr) => {
+  try {
+    // Geocodeer beide adressen via Nominatim
+    const geocode = async (addr) => {
+      const r = await fetch(
+        'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(addr) + '&format=json&limit=1&countrycodes=nl',
+        {headers: {'User-Agent': 'QLine-Rittenregistratie'}}
+      );
+      const d = await r.json();
+      return d[0] ? {lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon)} : null;
+    };
+    
+    const from = await geocode(fromAddr);
+    const to   = await geocode(toAddr);
+    if (!from || !to) return null;
+    
+    // Vraag route op via OSRM (volledig gratis)
+    const r = await fetch(
+      `https://router.project-osrm.org/route/v1/driving/${from.lon},${from.lat};${to.lon},${to.lat}?overview=false`
+    );
+    const d = await r.json();
+    if (d.routes && d.routes[0]) {
+      return Math.round(d.routes[0].distance / 1000); // meters naar km
+    }
+    return null;
+  } catch(e) {
+    console.log('Route error:', e);
+    return null;
+  }
+};
+
 window.updateKmDiff = (val) => {
   const el = document.getElementById('km-diff');
   if (!el) return;
@@ -1080,6 +1124,33 @@ window.startRit = async (vid, km, from, purpose, type, time) => {
   go('dash');
 };
 
+window.berekenKmNaInvoer = async (addr) => {
+  if (!addr || addr.length < 5) return;
+  const el = document.getElementById('km-berekend');
+  if (!el) return;
+  const vid = document.getElementById('avid')?.value;
+  const ride = S.activeRides[vid];
+  if (!ride) return;
+  el.textContent = '...';
+  el.style.color = '#888';
+  const fromAddr = ride.start_addr || 'Haarbrinksweg 47, Geesteren';
+  const km = await calculateRouteKm(fromAddr, addr);
+  if (km !== null) {
+    el.textContent = km;
+    el.style.color = 'var(--red)';
+    S.aankomst.km = String(ride.start_km + km);
+    S.aankomst.calculated_km = km;
+  } else {
+    el.textContent = '?';
+    el.style.color = '#e74c3c';
+  }
+};
+
+window.herbereken = async () => {
+  const addr = document.getElementById('aaddr')?.value || S.aankomst.addr;
+  if (addr) await berekenKmNaInvoer(addr);
+};
+
 window.stopRitFromForm = async () => {
   const vid   = document.getElementById('avid')?.value;
   const endKm = parseInt(S.aankomst.km || document.getElementById('akm')?.value || '0');
@@ -1105,6 +1176,8 @@ window.stopRit = async (vid, endKm, addr, time, notes) => {
   try {
     saveAddress(addr);
     saveAddress(ride.start_addr);
+    // Gebruik berekende km als beschikbaar, anders eindstand - beginstand
+    const calculatedKm = S.aankomst.calculated_km;
     await addDoc(collection(db,'trips'),{
       vehicle_id: vid,
       vehicle_license: v?.license||'',
@@ -1115,7 +1188,7 @@ window.stopRit = async (vid, endKm, addr, time, notes) => {
       arrival_time: time,
       odometer_start: ride.start_km,
       odometer_end: endKm,
-      km_total: endKm - ride.start_km,
+      km_total: calculatedKm || (endKm > ride.start_km ? endKm - ride.start_km : 0),
       departure_address: ride.start_addr||'',
       arrival_address: addr,
       purpose: ride.purpose,
