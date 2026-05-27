@@ -230,8 +230,8 @@ onAuthStateChanged(auth, async u => {
 // ── Data ─────────────────────────────────────────────────────────────────────
 async function loadTrips() {
   let q = isAdmin()
-    ? query(collection(db,'trips'), orderBy('trip_date','desc'))
-    : query(collection(db,'trips'), where('user_id','==',S.user.uid), orderBy('trip_date','desc'));
+    ? query(collection(db,'trips'), orderBy('trip_date','desc'), limit(200))
+    : query(collection(db,'trips'), where('user_id','==',S.user.uid), orderBy('trip_date','desc'), limit(100));
   const snap = await getDocs(q);
   S.trips = snap.docs.map(d => ({id:d.id,...d.data()}));
 }
@@ -249,7 +249,7 @@ async function loadUsers() {
 async function loadVehicleStatus() {
   for (const v of S.vehicles) {
     try {
-      const snap = await getDocs(query(collection(db,'trips'),where('vehicle_id','==',v.id),orderBy('trip_date','desc'),limit(5)));
+      const snap = await getDocs(query(collection(db,'trips'),where('vehicle_id','==',v.id),orderBy('trip_date','desc'),limit(1)));
       if (!snap.empty) {
         let best = null;
         snap.docs.forEach(d => { const t=d.data(); if(!best||(t.odometer_end||0)>(best.odometer_end||0)) best=t; });
@@ -261,7 +261,8 @@ async function loadVehicleStatus() {
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function render() {
-  window.S = S; // Maak state globaal toegankelijk voor onclick handlers
+  window.S = S;
+  window.nowTime = nowTime;
   window.db = db;
   window.addDoc = addDoc;
   window.collection = collection;
