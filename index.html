@@ -520,9 +520,25 @@ ${cards}
       </div>`
     ).join('');
 
+    // Km correctie: inline invoerveld tonen als nodig
+    const kmCorrectMode = S.wiz._kmCorrect;
     content = `
-<div class="wiz-label">Stap 3 van ${totalSteps}</div>
+<div class="wiz-label">Stap ${displayStep} van ${totalSteps}</div>
 <div class="wiz-question">Waar vertrek je vandaan?</div>
+
+${kmCorrectMode ? `
+<div style="margin-bottom:16px">
+  <label style="font-size:13px;font-weight:600;color:#555;display:block;margin-bottom:6px">Kilometerstand corrigeren</label>
+  <input class="wiz-input-big" type="number" id="wiz-km-fix" value="${esc(S.wiz.km)}"
+    placeholder="bijv. 171962" inputmode="numeric"
+    oninput="S.wiz.km=this.value;document.getElementById('wiz-km-disp').textContent=this.value"/>
+  <button onclick="S.wiz._kmCorrect=false;render()" style="margin-top:8px;width:100%;padding:10px;background:#f0f0f0;border:none;border-radius:8px;cursor:pointer;font-size:14px">✓ Opslaan</button>
+</div>` : `
+<div style="display:flex;align-items:center;justify-content:space-between;background:#f8f8f8;border-radius:8px;padding:10px 14px;margin-bottom:14px">
+  <span style="font-size:13px;color:#888">Beginstand: <strong id="wiz-km-disp">${esc(S.wiz.km)}</strong> km</span>
+  <button onclick="S.wiz._kmCorrect=true;render()" style="background:none;border:none;color:var(--red);font-size:13px;cursor:pointer;font-weight:600">✏️ Aanpassen</button>
+</div>`}
+
 <div style="display:flex;gap:8px;margin-bottom:12px">
   <input class="wiz-input-std" type="text" id="wiz-addr" value="${esc(S.wiz.addr)}"
     placeholder="Adres of locatie..."
@@ -533,7 +549,7 @@ ${cards}
 <div id="wiz-addr-sug" style="margin-bottom:12px"></div>
 ${S.wiz.addr?'':suggestions}
 <div class="wiz-hint">Tik het adres of gebruik 📍 voor automatische locatie</div>
-<button class="wiz-next ${S.wiz.addr?'ready':''}" id="wiz-next3" onclick="wizNext()" ${S.wiz.addr?'':'disabled'}>
+<button class="wiz-next ${S.wiz.addr&&!kmCorrectMode?'ready':''}" id="wiz-next3" onclick="wizNext()" ${S.wiz.addr&&!kmCorrectMode?'':'disabled'}>
   Volgende →
 </button>`;
   }
@@ -562,7 +578,7 @@ ${S.wiz.addr?'':suggestions}
 <div class="wiz-summary">
   <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:10px">Samenvatting</div>
   <div class="wiz-sum-row"><span class="wiz-sum-label">Voertuig</span><span class="wiz-sum-val">${esc(v?.license||'?')} · ${esc(v?.brand||'')}</span></div>
-  <div class="wiz-sum-row"><span class="wiz-sum-label">Beginstand</span><span class="wiz-sum-val">${esc(S.wiz.km)} km</span></div>
+  <div class="wiz-sum-row"><span class="wiz-sum-label">Beginstand</span><span class="wiz-sum-val">${esc(S.wiz.km)} km <button onclick="S.wiz._kmCorrect=true;S.wiz.step=3;render()" style="background:none;border:none;color:var(--red);font-size:12px;cursor:pointer">✏️</button></span></div>
   <div class="wiz-sum-row"><span class="wiz-sum-label">Vertrekadres</span><span class="wiz-sum-val">${esc(S.wiz.addr)}</span></div>
   <div class="wiz-sum-row"><span class="wiz-sum-label">Tijd</span><span class="wiz-sum-val">${nowTime()}</span></div>
 </div>
