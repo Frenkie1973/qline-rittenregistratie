@@ -64,11 +64,6 @@ textarea{resize:vertical;min-height:70px}
 .dtbl tr:nth-child(even){background:#f8f8f8}
 .dtbl td{padding:10px 16px;font-size:14px;border-bottom:1px solid #f5f5f5}
 .dtbl td:first-child{font-weight:500;color:#666;width:42%}
-.km-box{background:#f8f8f8;border:1px solid var(--border);border-radius:8px;padding:11px 12px;text-align:center}
-.km-val{font-size:22px;font-weight:700;color:var(--red)}
-.km-err .km-val{color:#e74c3c}
-.bz{display:none}
-.bz.on{display:block}
 .login-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:#f5f5f5}
 .login-logo{background:var(--black);border-radius:16px;padding:28px 36px;text-align:center;margin-bottom:24px;width:100%;max-width:360px}
 .login-card{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:360px;box-shadow:0 4px 24px rgba(0,0,0,.08)}
@@ -80,6 +75,44 @@ textarea{resize:vertical;min-height:70px}
 .adrop-item:hover{background:#f5f5f5}
 .adrop-item:last-child{border-bottom:none}
 .awrap{position:relative}
+
+/* ── Wizard styles ───────────────────────────── */
+.wiz-wrap{max-width:520px;margin:0 auto}
+.wiz-progress{display:flex;align-items:center;gap:0;margin-bottom:24px}
+.wiz-step-dot{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;transition:.2s}
+.wiz-step-dot.done{background:var(--red);color:#fff}
+.wiz-step-dot.active{background:var(--red);color:#fff;box-shadow:0 0 0 4px rgba(192,57,43,.2)}
+.wiz-step-dot.todo{background:#e0e0e0;color:#aaa}
+.wiz-line{flex:1;height:3px;background:#e0e0e0}
+.wiz-line.done{background:var(--red)}
+.wiz-card{background:#fff;border-radius:16px;border:1px solid var(--border);padding:24px;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,.04)}
+.wiz-label{font-size:13px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.wiz-question{font-size:22px;font-weight:700;margin-bottom:20px;line-height:1.3}
+.wiz-input-big{width:100%;font-size:24px;font-weight:700;padding:16px;border:2px solid var(--border);border-radius:10px;text-align:center;font-family:inherit;-webkit-appearance:none;background:#fff}
+.wiz-input-big:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px rgba(192,57,43,.1)}
+.wiz-input-std{width:100%;font-size:16px;padding:14px;border:2px solid var(--border);border-radius:10px;font-family:inherit;-webkit-appearance:none;background:#fff}
+.wiz-input-std:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px rgba(192,57,43,.1)}
+.wiz-type-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px}
+.wiz-type-btn{padding:20px 12px;border-radius:12px;border:2px solid var(--border);background:#fff;cursor:pointer;font-size:16px;font-weight:600;font-family:inherit;transition:.2s;display:flex;flex-direction:column;align-items:center;gap:6px}
+.wiz-type-btn .icon{font-size:32px}
+.wiz-type-btn.selected{border-color:var(--red);background:#fdf2f2;color:var(--red)}
+.wiz-next{width:100%;padding:18px;font-size:17px;font-weight:700;border-radius:12px;border:none;cursor:pointer;font-family:inherit;transition:.2s;display:flex;align-items:center;justify-content:center;gap:8px}
+.wiz-next:disabled{background:#e0e0e0!important;color:#aaa!important;cursor:not-allowed}
+.wiz-next.ready{background:var(--red);color:#fff}
+.wiz-next.ready:hover{background:var(--redd)}
+.wiz-back{width:100%;padding:14px;font-size:15px;font-weight:600;border-radius:12px;border:none;cursor:pointer;font-family:inherit;background:#f0f0f0;color:#555;margin-top:8px}
+.wiz-summary{background:#f8f8f8;border-radius:10px;padding:16px;margin-top:16px}
+.wiz-sum-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee;font-size:14px}
+.wiz-sum-row:last-child{border-bottom:none}
+.wiz-sum-label{color:#888}
+.wiz-sum-val{font-weight:600;text-align:right;max-width:60%}
+.wiz-hint{font-size:13px;color:#aaa;margin-top:8px;text-align:center}
+.wiz-km-diff{font-size:16px;font-weight:700;color:var(--red);text-align:center;margin-top:8px;min-height:24px}
+.wiz-vehicle-card{border:2px solid var(--border);border-radius:10px;padding:14px 16px;cursor:pointer;margin-bottom:8px;transition:.2s;background:#fff;display:flex;align-items:center;justify-content:space-between}
+.wiz-vehicle-card.selected{border-color:var(--red);background:#fdf2f2}
+.wiz-vehicle-card.inuse{opacity:.5;cursor:not-allowed;border-style:dashed}
+.wiz-gps-btn{background:#f0f4ff;border:2px solid #c0ccee;border-radius:10px;padding:12px 16px;cursor:pointer;font-size:22px;flex-shrink:0;transition:.2s}
+.wiz-gps-btn:active{background:#dde8ff}
 </style>
 </head>
 <body>
@@ -102,22 +135,28 @@ const app  = initializeApp(FB);
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
-// ── State ────────────────────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────────────
 const S = {
   user: null, profile: null,
   page: 'dash', loading: true, saving: false,
   trips: [], vehicles: [], users: [],
   activeRides: {},
-  aankomst: { addr: '', km: '', notes: '' },
-  vertrek: { addr: '', km: '', purpose: '' },
   editId: null,
   detailTrip: null,
   adminTab: 'vehicles',
   msg: null, msgType: 'success',
   ff: { from:'', to:'', type:'', status:'', search:'' },
+  // Wizard state
+  wiz: {
+    step: 1,
+    // vertrek
+    vid: '', km: '', addr: '', purpose: '', tripType: 'Zakelijk',
+    // aankomst
+    avid: '', endKm: '', endAddr: '',
+  }
 };
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 const R = document.getElementById('root');
 const isAdmin = () => S.profile?.role === 'admin';
 const pad = n => String(n).padStart(2,'0');
@@ -138,59 +177,47 @@ function go(page, extra={}) {
   render();
 }
 
+// ── Firebase active rides ─────────────────────────────────────────────────────
 async function loadAR() {
-  // Laad actieve ritten uit Firebase
   try {
     const snap = await getDocs(collection(db,'active_rides'));
     S.activeRides = {};
     snap.docs.forEach(d => { S.activeRides[d.data().vehicle_id] = {...d.data(), _docId: d.id}; });
-    // Migreer oude localStorage ritten naar Firebase
     const oldAR = JSON.parse(localStorage.getItem('qline_ar')||'{}');
     for (const [vid, ride] of Object.entries(oldAR)) {
       if (!S.activeRides[vid] && ride.start_km) {
-        // Zet over naar Firebase
         const ref = await addDoc(collection(db,'active_rides'), {...ride, migrated: true, created_at: serverTimestamp()});
         S.activeRides[vid] = {...ride, _docId: ref.id};
       }
     }
     if (Object.keys(oldAR).length > 0) localStorage.removeItem('qline_ar');
-  } catch(e) { 
-    // Fallback naar localStorage
+  } catch(e) {
     try { S.activeRides = JSON.parse(localStorage.getItem('qline_ar')||'{}'); } catch(e2) { S.activeRides = {}; }
   }
-  // Adres geheugen
   const saved = JSON.parse(localStorage.getItem('qline_addr')||'[]');
   const qline = 'Haarbrinksweg 47, Geesteren';
   if (!saved.includes(qline)) { saved.unshift(qline); localStorage.setItem('qline_addr', JSON.stringify(saved)); }
 }
 
 async function saveAR_start(vid, ride) {
-  // Sla nieuwe actieve rit op in Firebase
   const ref = await addDoc(collection(db,'active_rides'), ride);
   ride._docId = ref.id;
   S.activeRides[vid] = ride;
 }
 
 async function saveAR_stop(vid) {
-  // Verwijder actieve rit uit Firebase - altijd op vehicle_id zoeken
   try {
-    // Via _docId als bekend
     const ride = S.activeRides[vid];
-    if (ride?._docId) {
-      await deleteDoc(doc(db,'active_rides', ride._docId));
-    }
-    // Ook zoeken op vehicle_id voor zekerheid
+    if (ride?._docId) await deleteDoc(doc(db,'active_rides', ride._docId));
     const snap = await getDocs(query(collection(db,'active_rides'), where('vehicle_id','==',vid)));
-    for (const d of snap.docs) {
-      await deleteDoc(doc(db,'active_rides', d.id));
-    }
+    for (const d of snap.docs) await deleteDoc(doc(db,'active_rides', d.id));
   } catch(e) { console.log('saveAR_stop error:', e); }
   delete S.activeRides[vid];
 }
 
+// ── localStorage helpers ──────────────────────────────────────────────────────
 function getLastVehicle() { return localStorage.getItem('qline_last_vehicle')||''; }
 function setLastVehicle(vid) { localStorage.setItem('qline_last_vehicle', vid); }
-
 function getVehicleKm(vid) {
   try { return JSON.parse(localStorage.getItem('qline_vkm')||'{}')[vid]||null; } catch(e) { return null; }
 }
@@ -201,19 +228,16 @@ function setVehicleKm(vid, km, addr) {
     localStorage.setItem('qline_vkm', JSON.stringify(vkm));
   } catch(e) {}
 }
-
 function getSavedAddresses() {
   try { return JSON.parse(localStorage.getItem('qline_addr')||'["Haarbrinksweg 47, Geesteren"]'); } catch(e) { return ['Haarbrinksweg 47, Geesteren']; }
 }
-
 function saveAddress(addr) {
   if (!addr || addr.length < 3) return;
   const saved = getSavedAddresses();
   if (!saved.includes(addr)) { saved.unshift(addr); localStorage.setItem('qline_addr', JSON.stringify(saved.slice(0,40))); }
 }
-function saveAR() { localStorage.setItem('qline_ar', JSON.stringify(S.activeRides)); }
 
-// ── Auth ─────────────────────────────────────────────────────────────────────
+// ── Auth ──────────────────────────────────────────────────────────────────────
 const authTO = setTimeout(() => { if(S.loading){S.loading=false;render();} }, 8000);
 onAuthStateChanged(auth, async u => {
   clearTimeout(authTO);
@@ -235,7 +259,7 @@ onAuthStateChanged(auth, async u => {
   render();
 });
 
-// ── Data ─────────────────────────────────────────────────────────────────────
+// ── Data ──────────────────────────────────────────────────────────────────────
 async function loadTrips() {
   let q = isAdmin()
     ? query(collection(db,'trips'), orderBy('trip_date','desc'), limit(200))
@@ -243,47 +267,29 @@ async function loadTrips() {
   const snap = await getDocs(q);
   S.trips = snap.docs.map(d => ({id:d.id,...d.data()}));
 }
-
 async function loadVehicles() {
   const snap = await getDocs(query(collection(db,'vehicles'), orderBy('license')));
   S.vehicles = snap.docs.map(d => ({id:d.id,...d.data()})).filter(v => v.active!==false);
 }
-
 async function loadUsers() {
   const snap = await getDocs(collection(db,'users'));
   S.users = snap.docs.map(d => ({id:d.id,...d.data()}));
 }
-
 function loadVehicleStatus() {
-  // Gebruik al geladen trips - geen extra Firebase queries nodig
   for (const v of S.vehicles) {
     const vTrips = S.trips.filter(t => t.vehicle_id === v.id && t.odometer_end);
     if (vTrips.length > 0) {
-      // Sorteer op datum en pak de laatste
       const last = vTrips.sort((a,b) => (b.trip_date||'').localeCompare(a.trip_date||''))[0];
-      v.last_km   = last.odometer_end;
-      v.last_addr = last.arrival_address;
-      v.last_date = last.trip_date;
+      v.last_km = last.odometer_end; v.last_addr = last.arrival_address; v.last_date = last.trip_date;
     }
-    // Overschrijf met localStorage als die nieuwer is
     const lsData = getVehicleKm(v.id);
-    if (lsData && (!v.last_km || lsData.km >= v.last_km)) {
-      v.last_km   = lsData.km;
-      v.last_addr = lsData.addr;
-    }
+    if (lsData && (!v.last_km || lsData.km >= v.last_km)) { v.last_km = lsData.km; v.last_addr = lsData.addr; }
   }
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function render() {
   window.S = S;
-  window.nowTime = nowTime;
-  window.db = db;
-  window.addDoc = addDoc;
-  window.collection = collection;
-  window.deleteDoc = deleteDoc;
-  window.doc = doc;
-  window.serverTimestamp = serverTimestamp;
   if (S.loading) { R.innerHTML = '<div class="spin"><div class="sr"></div></div>'; return; }
   if (!S.user)   { R.innerHTML = renderLogin(); bindLogin(); return; }
   R.innerHTML = renderShell();
@@ -307,8 +313,8 @@ function renderShell() {
 <main>${S.msg?`<div class="alert a${S.msgType[0]}">${S.msg}</div>`:''}${renderPage()}</main>
 <nav class="nav">
   <button class="nb ${S.page==='dash'?'on':''}" onclick="go('dash')"><span class="ni">📊</span>Dashboard</button>
-  <button class="nb ${S.page==='rijden'?'on':''}" onclick="go('rijden')"><span class="ni">🚗</span>Ga rijden</button>
-  <button class="nb ${S.page==='aankomst'?'on':''}" onclick="go('aankomst')">${actCnt>0?`<span class="badge">${actCnt}</span>`:''}<span class="ni">📍</span>Aankomst</button>
+  <button class="nb ${S.page==='rijden'?'on':''}" onclick="goWizRijden()"><span class="ni">🚗</span>Ga rijden</button>
+  <button class="nb ${S.page==='aankomst'?'on':''}" onclick="goWizAankomst()">${actCnt>0?`<span class="badge">${actCnt}</span>`:''}<span class="ni">📍</span>Aankomst</button>
   <button class="nb ${S.page==='trips'?'on':''}" onclick="go('trips')"><span class="ni">📋</span>Ritten</button>
   ${isAdmin()?`<button class="nb ${S.page==='admin'?'on':''}" onclick="go('admin')"><span class="ni">⚙️</span>Beheer</button>`:''}
 </nav>`;
@@ -316,12 +322,12 @@ function renderShell() {
 
 function renderPage() {
   switch(S.page) {
-    case 'dash':    return renderDash();
-    case 'rijden':  return renderRijden();
-    case 'aankomst':return renderAankomst();
-    case 'trips':   return renderTrips();
-    case 'detail':  return renderDetail();
-    case 'admin':   return renderAdmin();
+    case 'dash':         return renderDash();
+    case 'rijden':       return renderWizRijden();
+    case 'aankomst':     return renderWizAankomst();
+    case 'trips':        return renderTrips();
+    case 'detail':       return renderDetail();
+    case 'admin':        return renderAdmin();
     default: return renderDash();
   }
 }
@@ -336,13 +342,10 @@ function renderDash() {
   const pri = mt.filter(t=>t.trip_type==='Privé').reduce((s,t)=>s+(t.km_total||0),0);
   const open = mt.filter(t=>t.status==='open').length;
   const actCnt = Object.keys(S.activeRides).length;
-
   const pvmap = {};
   mt.forEach(t=>{ const k=t.vehicle_license||'?'; pvmap[k]=(pvmap[k]||0)+(t.km_total||0); });
   const pvArr = Object.entries(pvmap).sort((a,b)=>b[1]-a[1]).slice(0,5);
-
   const openList = S.trips.filter(t=>t.status==='open').slice(0,5);
-
   const hr = new Date().getHours();
   const groet = hr < 12 ? 'Goedemorgen' : hr < 18 ? 'Goedemiddag' : 'Goedenavond';
   return `
@@ -351,17 +354,15 @@ function renderDash() {
   <div class="ps">${now.toLocaleDateString('nl-NL',{month:'long',year:'numeric'})}</div></div>
   <div style="display:flex;gap:6px">
     <button class="btn bs bsm" onclick="exportCSV()">CSV</button>
-    <button class="btn bp bsm" onclick="go('rijden')">🚗 Rijden</button>
+    <button class="btn bp bsm" onclick="goWizRijden()">🚗 Rijden</button>
   </div>
 </div>
-
 <div class="stat">
   <div class="sc"><div class="sl">Totaal km</div><div class="sv">${tot}</div><div class="ss">${mt.length} ritten</div></div>
   <div class="sc"><div class="sl">Zakelijk</div><div class="sv" style="color:#084298">${zak}</div><div class="ss">km</div></div>
   <div class="sc"><div class="sl">Privé</div><div class="sv" style="color:#4a1a6e">${pri}</div><div class="ss">km</div></div>
   <div class="sc"><div class="sl">Open</div><div class="sv" style="color:${open>0?'#856404':'#166534'}">${open}</div><div class="ss">te controleren</div></div>
 </div>
-
 ${actCnt>0?`
 <div class="card" style="border-left:4px solid var(--red)">
   <div class="ch" style="background:#fdf2f2;color:#721c24">🚗 Onderweg (${actCnt})</div>
@@ -370,11 +371,10 @@ ${actCnt>0?`
     return `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #fdf2f2">
       <div><p style="font-weight:600">${esc(v?.license||'?')} · ${esc(ride.user_name||'')}</p>
       <p style="font-size:12px;color:#888">Van: ${esc(ride.start_addr||'?')} · ${esc(ride.dep_time||'')} · ${ride.start_km} km</p></div>
-      <button class="btn bp bsm" onclick="go('aankomst')">📍 Aankomst</button>
+      <button class="btn bp bsm" onclick="goWizAankomst()">📍 Aankomst</button>
     </div>`;
   }).join('')}
 </div>`:''}
-
 ${isAdmin()&&openList.length>0?`
 <div class="card" style="border-left:3px solid #fbbf24">
   <div class="ch" style="background:#fefce8;color:#854d0e">⏳ Openstaand (${openList.length})</div>
@@ -387,23 +387,19 @@ ${isAdmin()&&openList.length>0?`
     </div>
   </div>`).join('')}
 </div>`:''}
-
 ${pvArr.length>0?`
 <div class="card">
   <div class="ch">Per voertuig</div>
   <div class="cb">
     ${pvArr.map(([k,v])=>`
     <div style="margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
-        <span>${esc(k)}</span><span>${v} km</span>
-      </div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px"><span>${esc(k)}</span><span>${v} km</span></div>
       <div style="height:6px;background:#f0f0f0;border-radius:3px;overflow:hidden">
         <div style="height:100%;background:var(--red);border-radius:3px;width:${tot?Math.round(v/tot*100):0}%"></div>
       </div>
     </div>`).join('')}
   </div>
 </div>`:''}
-
 <div class="card">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #f0f0f0">
     <span style="font-weight:600;font-size:12px;color:#555;text-transform:uppercase">Recente ritten</span>
@@ -414,170 +410,573 @@ ${pvArr.length>0?`
 </div>`;
 }
 
-// ── Rijden ────────────────────────────────────────────────────────────────────
-function renderRijden() {
+// ══════════════════════════════════════════════════════════════════
+// WIZARD — VERTREKKEN  (4 stappen)
+// Stap 1: Voertuig kiezen
+// Stap 2: Beginstand km
+// Stap 3: Vertrekadres
+// Stap 4: Doel + type → bevestigen
+// ══════════════════════════════════════════════════════════════════
+window.goWizRijden = () => {
   const lastVid = getLastVehicle();
-  // Vul voertuig + km + adres alvast in vanuit cache
-  S.vehicles.forEach(v => {
-    const lsData = getVehicleKm(v.id);
-    if (!v.last_km && lsData) { v.last_km = lsData.km; v.last_addr = lsData.addr; }
-  });
-  const v = S.vehicles.find(x => x.id === lastVid) || S.vehicles[0];
-  const vopts = S.vehicles.map(vx => {
-    const act = S.activeRides[vx.id];
-    const km = vx.last_km ? ' ('+vx.last_km+' km)' : '';
-    const lbl = act ? '⚠️ '+vx.license+' · IN GEBRUIK' : vx.license+(vx.brand?' · '+vx.brand:'')+km;
-    const sel = vx.id === (v?.id||'') ? 'selected' : '';
-    return '<option value="'+vx.id+'" '+sel+'>'+esc(lbl)+'</option>';
-  }).join('');
+  S.wiz = { step:1, vid: lastVid, km:'', addr:'', purpose:'', tripType:'Zakelijk', avid:'', endKm:'', endAddr:'' };
+  // Pre-fill km en addr van vorig voertuig
+  if (lastVid) {
+    const v = S.vehicles.find(x => x.id === lastVid);
+    const lsKm = getVehicleKm(lastVid);
+    S.wiz.km = String(v?.last_km || lsKm?.km || '');
+    S.wiz.addr = localStorage.getItem('qline_last_addr_' + lastVid) || v?.last_addr || lsKm?.addr || '';
+  }
+  go('rijden');
+};
 
-  const startKm = v?.last_km || '';
-  // Haal opgeslagen adres op: eerst localStorage, dan Firebase last_addr
-  const startAddr = (v ? localStorage.getItem('qline_last_addr_' + v.id) : null) || v?.last_addr || '';
+function renderWizRijden() {
+  const step = S.wiz.step;
+  const totalSteps = 4;
+  const labels = ['Voertuig','Kilometerstand','Vertrekadres','Bevestigen'];
 
-  // GPS NIET automatisch - alleen als gebruiker op 📍 klikt
+  const progressHtml = `
+<div class="wiz-progress">
+  ${labels.map((l,i) => {
+    const n = i+1;
+    const cls = n < step ? 'done' : n === step ? 'active' : 'todo';
+    return (i>0?`<div class="wiz-line ${n<=step?'done':''}"></div>`:'') +
+      `<div class="wiz-step-dot ${cls}">${n < step ? '✓' : n}</div>`;
+  }).join('')}
+</div>`;
+
+  let content = '';
+
+  if (step === 1) {
+    // Voertuig kiezen
+    const cards = S.vehicles.map(v => {
+      const inUse = !!S.activeRides[v.id];
+      const sel = S.wiz.vid === v.id;
+      const km = v.last_km ? v.last_km + ' km' : 'geen stand bekend';
+      return `<div class="wiz-vehicle-card ${sel?'selected':''} ${inUse?'inuse':''}"
+        onclick="${inUse?'':'wizSelectVehicle(\''+v.id+'\')'}">
+        <div>
+          <div style="font-size:18px;font-weight:700">${esc(v.license)}</div>
+          <div style="font-size:13px;color:#888;margin-top:2px">${esc(v.brand||'')} ${esc(v.model||'')} · ${km}</div>
+          ${inUse?'<div style="font-size:12px;color:#e74c3c;margin-top:3px">⚠️ Nu in gebruik</div>':''}
+        </div>
+        ${sel ? '<div style="color:var(--red);font-size:22px">✓</div>' : ''}
+      </div>`;
+    }).join('');
+
+    content = `
+<div class="wiz-label">Stap 1 van ${totalSteps}</div>
+<div class="wiz-question">Welke auto neem je?</div>
+${cards}
+<button class="wiz-next ${S.wiz.vid?'ready':''}" onclick="wizNext()" ${S.wiz.vid?'':'disabled'}>
+  Volgende →
+</button>`;
+  }
+
+  else if (step === 2) {
+    const v = S.vehicles.find(x => x.id === S.wiz.vid);
+    const hint = v?.last_km ? `Laatste bekende stand: <strong>${v.last_km} km</strong>` : 'Eerste rit voor dit voertuig';
+    content = `
+<div class="wiz-label">Stap 2 van ${totalSteps}</div>
+<div class="wiz-question">Wat is de huidige kilometerstand?</div>
+<div class="alert ai" style="margin-bottom:16px">${hint}</div>
+<input class="wiz-input-big" type="number" id="wiz-km" value="${esc(S.wiz.km)}"
+  placeholder="bijv. 171962"
+  oninput="S.wiz.km=this.value;wizCheckNext2()"
+  inputmode="numeric"/>
+<div class="wiz-hint">Vul de stand in zoals op de teller</div>
+<button class="wiz-next ${S.wiz.km?'ready':''}" id="wiz-next2" onclick="wizNext()" ${S.wiz.km?'':'disabled'}>
+  Volgende →
+</button>`;
+  }
+
+  else if (step === 3) {
+    const saved = getSavedAddresses();
+    const suggestions = saved.slice(0,4).map(a =>
+      `<div onclick="wizPickAddr('${a.replace(/'/g,"\\'")}')"
+        style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:#fff;font-size:14px;margin-bottom:8px">
+        📍 ${esc(a)}
+      </div>`
+    ).join('');
+
+    content = `
+<div class="wiz-label">Stap 3 van ${totalSteps}</div>
+<div class="wiz-question">Waar vertrek je vandaan?</div>
+<div style="display:flex;gap:8px;margin-bottom:12px">
+  <input class="wiz-input-std" type="text" id="wiz-addr" value="${esc(S.wiz.addr)}"
+    placeholder="Adres of locatie..."
+    oninput="S.wiz.addr=this.value;wizCheckNext3();wizAddrSug(this.value)"
+    autocomplete="off" style="flex:1"/>
+  <button class="wiz-gps-btn" onclick="wizGetGPS()">📍</button>
+</div>
+<div id="wiz-addr-sug" style="margin-bottom:12px"></div>
+${S.wiz.addr?'':suggestions}
+<div class="wiz-hint">Tik het adres of gebruik 📍 voor automatische locatie</div>
+<button class="wiz-next ${S.wiz.addr?'ready':''}" id="wiz-next3" onclick="wizNext()" ${S.wiz.addr?'':'disabled'}>
+  Volgende →
+</button>`;
+  }
+
+  else if (step === 4) {
+    const v = S.vehicles.find(x => x.id === S.wiz.vid);
+    const canConfirm = S.wiz.purpose && S.wiz.tripType;
+    content = `
+<div class="wiz-label">Stap 4 van ${totalSteps}</div>
+<div class="wiz-question">Wat is het doel van de rit?</div>
+<input class="wiz-input-std" type="text" id="wiz-purpose" value="${esc(S.wiz.purpose)}"
+  placeholder="bijv. klantbezoek, levering, ophalen..."
+  oninput="S.wiz.purpose=this.value;wizCheckNext4()"
+  style="margin-bottom:20px"/>
+
+<div style="font-size:14px;font-weight:600;color:#555;margin-bottom:10px">Type rit</div>
+<div class="wiz-type-grid" style="margin-bottom:20px">
+  <button class="wiz-type-btn ${S.wiz.tripType==='Zakelijk'?'selected':''}" onclick="wizSetType('Zakelijk')">
+    <span class="icon">💼</span>Zakelijk
+  </button>
+  <button class="wiz-type-btn ${S.wiz.tripType==='Privé'?'selected':''}" onclick="wizSetType('Privé')">
+    <span class="icon">🏠</span>Privé
+  </button>
+</div>
+
+<div class="wiz-summary">
+  <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:10px">Samenvatting</div>
+  <div class="wiz-sum-row"><span class="wiz-sum-label">Voertuig</span><span class="wiz-sum-val">${esc(v?.license||'?')} · ${esc(v?.brand||'')}</span></div>
+  <div class="wiz-sum-row"><span class="wiz-sum-label">Beginstand</span><span class="wiz-sum-val">${esc(S.wiz.km)} km</span></div>
+  <div class="wiz-sum-row"><span class="wiz-sum-label">Vertrekadres</span><span class="wiz-sum-val">${esc(S.wiz.addr)}</span></div>
+  <div class="wiz-sum-row"><span class="wiz-sum-label">Tijd</span><span class="wiz-sum-val">${nowTime()}</span></div>
+</div>
+
+<button class="wiz-next ${canConfirm&&!S.saving?'ready':''}" id="wiz-confirm" style="margin-top:16px"
+  onclick="wizStartRit()" ${canConfirm&&!S.saving?'':'disabled'}>
+  ${S.saving ? '⏳ Bezig...' : '🚗 Vertrekken — bevestigen'}
+</button>`;
+  }
 
   return `
-<div class="ph"><div><div class="pt">🚗 Vertrekken</div><div class="ps">Controleer en bevestig</div></div></div>
-<div class="card">
-  <div class="ch">Voertuig</div>
-  <div class="cb">
-    <select id="rv" onchange="onVehicleSelect(this.value)" style="font-size:16px;padding:14px;width:100%">
-      ${vopts}
-    </select>
-    <div id="rstatus" class="alert ai" style="margin-top:10px;display:${startKm?'block':'none'}">
-      Beginstand: <strong>${startKm} km</strong> · Laatste locatie: ${esc(startAddr)}
-    </div>
-  </div>
-</div>
-
-<div class="card">
-  <div class="ch">Vertrekadres</div>
-  <div class="cb">
-    <div class="fg awrap">
-      <div style="display:flex;gap:8px">
-        <input type="text" id="rfrom" value="${esc(startAddr)}" placeholder="Bepalen via GPS..." style="font-size:14px;flex:1" autocomplete="off"
-          oninput="S.vertrek.addr=this.value;showAddrSug('rfrom',this.value)" onfocus="showAddrSug('rfrom',this.value)" onblur="setTimeout(()=>hideAddrSug('rfrom'),200)"/>
-        <button type="button" onclick="getGPS('rfrom')" style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:8px;padding:10px 14px;cursor:pointer;font-size:20px;flex-shrink:0">📍</button>
-      </div>
-      <div id="sug-rfrom" class="adrop" style="display:none"></div>
-    </div>
-    <div class="fg">
-      <label style="font-weight:700">Beginstand km *</label>
-      <input type="number" id="rkm" value="${startKm}" placeholder="km stand" style="font-size:22px;padding:14px;font-weight:700;text-align:center" oninput="S.vertrek.km=this.value"/>
-    </div>
-  </div>
-</div>
-
-<div class="card">
-  <div class="ch">Rit info</div>
-  <div class="cb">
-    <div class="fg">
-      <label style="font-weight:700;font-size:15px">Doel / klant / project *</label>
-      <input type="text" id="rpurpose" placeholder="bijv. klant bezoek, levering, ophalen..." style="font-size:16px;padding:14px" oninput="S.vertrek.purpose=this.value"/>
-    </div>
-    <div class="fg">
-      <label style="font-weight:700;font-size:15px">Type rit</label>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px">
-        <button id="btn-zakelijk" onclick="setTripType('Zakelijk')" class="btn" style="padding:16px;font-size:16px;background:var(--red);color:#fff;border-radius:10px">💼 Zakelijk</button>
-        <button id="btn-prive" onclick="setTripType('Prive')" class="btn" style="padding:16px;font-size:16px;background:#f0f0f0;color:#555;border-radius:10px">🏠 Privé</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<button class="btn bp bw" style="font-size:18px;padding:18px;margin-bottom:8px;opacity:${S.saving?'0.6':'1'}" onclick="startRitFromForm()" ${S.saving?'disabled':''}>
-  ${S.saving ? '⏳ Bezig...' : '🚗 Vertrekken'}
-</button>
-<button class="btn bs bw" onclick="go('dash')">Annuleren</button>`;
+<div class="wiz-wrap">
+  ${progressHtml}
+  <div class="wiz-card">${content}</div>
+  ${step > 1 ? `<button class="wiz-back" onclick="wizBack()">← Terug</button>` : ''}
+  <button class="wiz-back" style="margin-top:4px;background:transparent;color:#aaa" onclick="go('dash')">Annuleren</button>
+</div>`;
 }
 
-// ── Aankomst ──────────────────────────────────────────────────────────────────
-function renderAankomst() {
-  // Reset aankomst state bij elke nieuwe aankomst
-  if (S.page !== '_aankomst_active') {
-    S.aankomst = { addr: '', km: '', notes: '' };
-  }
+// ══════════════════════════════════════════════════════════════════
+// WIZARD — AANKOMST  (3 stappen)
+// Stap 1: Voertuig (als meerdere actief)
+// Stap 2: Aankomstadres
+// Stap 3: Eindstand km → bevestigen
+// ══════════════════════════════════════════════════════════════════
+window.goWizAankomst = () => {
+  const actief = S.vehicles.filter(v => S.activeRides[v.id]);
+  if (!actief.length) { go('aankomst'); return; }
+  // Als maar 1 actief: sla stap 1 over
+  const startStep = actief.length === 1 ? 2 : 1;
+  const startVid = actief.length === 1 ? actief[0].id : '';
+  S.wiz = { ...S.wiz, step: startStep, avid: startVid, endKm:'', endAddr:'' };
+  go('aankomst');
+};
+
+function renderWizAankomst() {
   const actief = S.vehicles.filter(v => S.activeRides[v.id]);
   if (!actief.length) return `
 <div class="ph"><div class="pt">📍 Aangekomen</div></div>
 <div class="card"><div class="cb">
   <div class="empty"><div class="ei">🚗</div><p>Geen actieve ritten.<br>Druk eerst op "Ga rijden".</p></div>
 </div></div>
-<button class="btn bs bw" onclick="go('dash')" style="margin-top:8px">Terug</button>`;
+<button class="btn bs bw" onclick="go('dash')" style="margin-top:8px">← Terug</button>`;
 
-  // Als er meerdere actieve ritten zijn, toon keuze
-  if (actief.length > 1) {
-    return `
-<div class="ph"><div><div class="pt">📍 Welke auto?</div><div class="ps">Meerdere ritten actief</div></div></div>
-${actief.map(vx => {
-  const ride = S.activeRides[vx.id];
-  return `<div class="card" style="margin-bottom:10px">
-    <div class="cb">
-      <p style="font-weight:700;font-size:16px">${esc(vx.license)} · ${esc(vx.brand||'')}</p>
-      <p style="font-size:13px;color:#888;margin:4px 0">Van: ${esc(ride.start_addr||'?')} · ${ride.start_km} km</p>
-      <p style="font-size:13px;color:#888;margin-bottom:12px">Doel: ${esc(ride.purpose||'')}</p>
-      <div style="display:flex;gap:8px">
-        <button class="btn bp" style="flex:1;padding:12px" onclick="selectAankomst('${vx.id}')">📍 Aankomst</button>
-        <button class="btn" style="background:#888;color:#fff;padding:12px 16px;border-radius:8px;cursor:pointer;border:none" onclick="annuleerRit('${vx.id}')">✕ Annuleer rit</button>
-      </div>
-    </div>
-  </div>`;
-}).join('')}
-<button class="btn bs bw" onclick="go('dash')" style="margin-top:8px">Terug</button>`;
+  const step = S.wiz.step;
+  const totalSteps = actief.length > 1 ? 3 : 2;
+  const labels = actief.length > 1 ? ['Voertuig','Aankomstadres','Kilometerstand'] : ['Aankomstadres','Kilometerstand'];
+
+  const progressHtml = `
+<div class="wiz-progress">
+  ${labels.map((l,i) => {
+    const n = i+1;
+    const adjustedStep = actief.length > 1 ? step : step - 1;
+    const cls = n < adjustedStep ? 'done' : n === adjustedStep ? 'active' : 'todo';
+    return (i>0?`<div class="wiz-line ${n<adjustedStep?'done':''}"></div>`:'') +
+      `<div class="wiz-step-dot ${cls}">${n < adjustedStep ? '✓' : n}</div>`;
+  }).join('')}
+</div>`;
+
+  let content = '';
+  const ride = S.wiz.avid ? S.activeRides[S.wiz.avid] : null;
+  const veh = S.wiz.avid ? S.vehicles.find(x => x.id === S.wiz.avid) : null;
+
+  if (step === 1 && actief.length > 1) {
+    // Kies voertuig
+    const cards = actief.map(v => {
+      const r = S.activeRides[v.id];
+      const sel = S.wiz.avid === v.id;
+      return `<div class="wiz-vehicle-card ${sel?'selected':''}" onclick="wizSelectAVehicle('${v.id}')">
+        <div>
+          <div style="font-size:18px;font-weight:700">${esc(v.license)} · ${esc(v.brand||'')}</div>
+          <div style="font-size:13px;color:#888;margin-top:3px">Van: ${esc(r.start_addr||'?')} · ${r.start_km} km</div>
+          <div style="font-size:13px;color:#666">Doel: ${esc(r.purpose||'')}</div>
+        </div>
+        ${sel ? '<div style="color:var(--red);font-size:22px">✓</div>' : ''}
+      </div>`;
+    }).join('');
+
+    content = `
+<div class="wiz-label">Stap 1 van ${totalSteps}</div>
+<div class="wiz-question">Met welke auto ben je aangekomen?</div>
+${cards}
+<button class="wiz-next ${S.wiz.avid?'ready':''}" onclick="wizANext()" ${S.wiz.avid?'':'disabled'}>Volgende →</button>`;
   }
 
-  const v = actief[0];
-  const ride = S.activeRides[v.id];
+  else if (step === 2) {
+    const saved = getSavedAddresses();
+    const suggestions = saved.slice(0,4).map(a =>
+      `<div onclick="wizPickEndAddr('${a.replace(/'/g,"\\'")}')"
+        style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:#fff;font-size:14px;margin-bottom:8px">
+        📍 ${esc(a)}
+      </div>`
+    ).join('');
 
-  // GPS NIET automatisch - alleen als gebruiker op 📍 klikt
-  // (auto-GPS veroorzaakte re-render die velden leegmaakte)
+    content = `
+<div class="wiz-label">Stap ${actief.length>1?2:1} van ${totalSteps}</div>
+<div class="wiz-question">Waar ben je aangekomen?</div>
+${ride?`<div class="alert ai" style="margin-bottom:16px">Vertrok van <strong>${esc(ride.start_addr||'?')}</strong> om ${esc(ride.dep_time||'')}</div>`:''}
+<div style="display:flex;gap:8px;margin-bottom:12px">
+  <input class="wiz-input-std" type="text" id="wiz-endaddr" value="${esc(S.wiz.endAddr)}"
+    placeholder="Aankomstadres..."
+    oninput="S.wiz.endAddr=this.value;wizCheckANext2();wizEndAddrSug(this.value)"
+    autocomplete="off" style="flex:1"/>
+  <button class="wiz-gps-btn" onclick="wizGetEndGPS()">📍</button>
+</div>
+<div id="wiz-endaddr-sug" style="margin-bottom:12px"></div>
+${S.wiz.endAddr?'':suggestions}
+<button class="wiz-next ${S.wiz.endAddr?'ready':''}" id="wiz-anext2" onclick="wizANext()" ${S.wiz.endAddr?'':'disabled'}>Volgende →</button>`;
+  }
+
+  else if (step === 3) {
+    const endKmNum = parseInt(S.wiz.endKm||'0');
+    const startKm = ride?.start_km || 0;
+    const diff = endKmNum > startKm ? endKmNum - startKm : 0;
+    const kmOk = endKmNum > startKm;
+    const canConfirm = kmOk && !S.saving;
+
+    content = `
+<div class="wiz-label">Stap ${actief.length>1?3:2} van ${totalSteps}</div>
+<div class="wiz-question">Wat is de eindstand?</div>
+<div class="alert ai" style="margin-bottom:16px">Beginstand was <strong>${startKm} km</strong></div>
+<input class="wiz-input-big" type="number" id="wiz-endkm" value="${esc(S.wiz.endKm)}"
+  placeholder="bijv. 172045"
+  oninput="S.wiz.endKm=this.value;wizCheckANext3()"
+  inputmode="numeric"/>
+<div class="wiz-km-diff" id="wiz-km-diff">
+  ${diff>0 ? diff+' km gereden' : S.wiz.endKm ? '⚠️ Lager dan beginstand' : ''}
+</div>
+
+<div class="wiz-summary" style="margin-top:16px">
+  <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:10px">Samenvatting</div>
+  <div class="wiz-sum-row"><span class="wiz-sum-label">Voertuig</span><span class="wiz-sum-val">${esc(veh?.license||'?')}</span></div>
+  <div class="wiz-sum-row"><span class="wiz-sum-label">Van</span><span class="wiz-sum-val">${esc(ride?.start_addr||'?')}</span></div>
+  <div class="wiz-sum-row"><span class="wiz-sum-label">Naar</span><span class="wiz-sum-val">${esc(S.wiz.endAddr)}</span></div>
+  <div class="wiz-sum-row"><span class="wiz-sum-label">Vertrek</span><span class="wiz-sum-val">${esc(ride?.dep_time||'?')}</span></div>
+  <div class="wiz-sum-row"><span class="wiz-sum-label">Aankomst</span><span class="wiz-sum-val">${nowTime()}</span></div>
+  ${diff>0?`<div class="wiz-sum-row"><span class="wiz-sum-label">Gereden</span><span class="wiz-sum-val" style="color:var(--red);font-size:18px">${diff} km</span></div>`:''}
+</div>
+
+<button class="wiz-next ${canConfirm?'ready':''}" id="wiz-aconfirm" style="margin-top:16px"
+  onclick="wizStopRit()" ${canConfirm?'':'disabled'}>
+  ${S.saving ? '⏳ Opslaan...' : '📍 Opslaan — bevestigen'}
+</button>
+<button class="btn bw" style="background:#fff;color:#e74c3c;border:1px solid #e74c3c;padding:12px;margin-top:8px;border-radius:8px;font-size:14px;cursor:pointer" onclick="annuleerRit(S.wiz.avid)">✕ Rit annuleren (niet opslaan)</button>`;
+  }
 
   return `
-<div class="ph"><div><div class="pt">📍 Aangekomen</div><div class="ps">${esc(v.license)} · ${esc(ride.purpose||'')}</div></div></div>
-<input type="hidden" id="avid" value="${v.id}"/>
-
-<div class="card" style="border-left:4px solid var(--red)">
-  <div class="ch">Rit info</div>
-  <div class="cb" style="padding:12px 16px">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
-      <div><span style="color:#888">Van</span><br><strong>${esc(ride.start_addr||'?')}</strong></div>
-      <div><span style="color:#888">Vertrek</span><br><strong>${esc(ride.dep_time||'')}</strong></div>
-      <div><span style="color:#888">Beginstand</span><br><strong>${ride.start_km} km</strong></div>
-      <div><span style="color:#888">Rijder</span><br><strong>${esc(ride.user_name?.split(' ')[0]||'')}</strong></div>
-    </div>
-  </div>
-</div>
-
-<div class="card">
-  <div class="ch">Aankomstadres</div>
-  <div class="cb">
-    <div class="fg awrap">
-      <div style="display:flex;gap:8px">
-        <input type="text" id="aaddr" placeholder="Bepalen via GPS..." style="font-size:14px;flex:1" autocomplete="off"
-          oninput="S.aankomst.addr=this.value;showAddrSug('aaddr',this.value)" onfocus="showAddrSug('aaddr',this.value)" onblur="setTimeout(()=>hideAddrSug('aaddr'),200)"/>
-        <button type="button" onclick="getGPS('aaddr')" style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:8px;padding:10px 14px;cursor:pointer;font-size:20px;flex-shrink:0">📍</button>
-      </div>
-      <div id="sug-aaddr" class="adrop" style="display:none"></div>
-    </div>
-  </div>
-</div>
-
-<div class="card">
-  <div class="ch">Eindstand km *</div>
-  <div class="cb">
-    <input type="number" id="akm" placeholder="Bijv. 172045" style="font-size:28px;padding:16px;font-weight:700;text-align:center;width:100%;border:2px solid #ddd;border-radius:8px" oninput="S.aankomst.km=this.value;updateKmDiff(this.value)"/>
-    <p style="font-size:13px;color:#888;margin-top:8px;text-align:center">Beginstand: <strong>${ride.start_km} km</strong></p>
-    <div id="km-diff" style="text-align:center;margin-top:6px;font-size:15px"></div>
-  </div>
-</div>
-
-<button class="btn bp bw" style="font-size:18px;padding:18px;margin-bottom:8px;opacity:${S.saving?'0.6':'1'}" onclick="stopRitFromForm()" ${S.saving?'disabled':''}>
-  ${S.saving ? '⏳ Bezig...' : '📍 Opslaan & klaar'}
-</button>
-<button class="btn bs bw" style="margin-bottom:8px" onclick="go('dash')">← Terug</button>
-<button class="btn bw" style="background:#fff;color:#e74c3c;border:1px solid #e74c3c;padding:12px" onclick="annuleerRit(document.getElementById('avid')?.value)">✕ Rit annuleren (niet opslaan)</button>`;
+<div class="wiz-wrap">
+  ${progressHtml}
+  <div class="wiz-card">${content}</div>
+  ${step > (actief.length>1?1:2) ? `<button class="wiz-back" onclick="wizABack()">← Terug</button>` : ''}
+  <button class="wiz-back" style="margin-top:4px;background:transparent;color:#aaa" onclick="go('dash')">← Dashboard</button>
+</div>`;
 }
+
+// ── Wizard event handlers ─────────────────────────────────────────────────────
+window.wizSelectVehicle = (vid) => {
+  S.wiz.vid = vid;
+  const v = S.vehicles.find(x => x.id === vid);
+  const lsKm = getVehicleKm(vid);
+  S.wiz.km = String(v?.last_km || lsKm?.km || '');
+  S.wiz.addr = localStorage.getItem('qline_last_addr_' + vid) || v?.last_addr || lsKm?.addr || '';
+  render();
+};
+
+window.wizSelectAVehicle = (vid) => {
+  S.wiz.avid = vid;
+  render();
+};
+
+window.wizNext = () => {
+  if (S.wiz.step < 4) { S.wiz.step++; render(); window.scrollTo(0,0); }
+};
+
+window.wizBack = () => {
+  if (S.wiz.step > 1) { S.wiz.step--; render(); window.scrollTo(0,0); }
+};
+
+window.wizANext = () => {
+  S.wiz.step++;
+  render();
+  window.scrollTo(0,0);
+};
+
+window.wizABack = () => {
+  const actief = S.vehicles.filter(v => S.activeRides[v.id]);
+  const minStep = actief.length > 1 ? 1 : 2;
+  if (S.wiz.step > minStep) { S.wiz.step--; render(); window.scrollTo(0,0); }
+};
+
+window.wizCheckNext2 = () => {
+  const btn = document.getElementById('wiz-next2');
+  if (btn) { btn.disabled = !S.wiz.km; btn.className = 'wiz-next ' + (S.wiz.km?'ready':''); }
+};
+
+window.wizCheckNext3 = () => {
+  const btn = document.getElementById('wiz-next3');
+  if (btn) { btn.disabled = !S.wiz.addr; btn.className = 'wiz-next ' + (S.wiz.addr?'ready':''); }
+};
+
+window.wizCheckNext4 = () => {
+  const btn = document.getElementById('wiz-confirm');
+  const ok = S.wiz.purpose && S.wiz.tripType;
+  if (btn) { btn.disabled = !ok; btn.className = 'wiz-next ' + (ok?'ready':''); }
+};
+
+window.wizCheckANext2 = () => {
+  const btn = document.getElementById('wiz-anext2');
+  if (btn) { btn.disabled = !S.wiz.endAddr; btn.className = 'wiz-next ' + (S.wiz.endAddr?'ready':''); }
+};
+
+window.wizCheckANext3 = () => {
+  const btn = document.getElementById('wiz-aconfirm');
+  const diff = document.getElementById('wiz-km-diff');
+  const ride = S.activeRides[S.wiz.avid];
+  const endKm = parseInt(S.wiz.endKm||'0');
+  const startKm = ride?.start_km || 0;
+  const ok = endKm > startKm;
+  if (diff) {
+    if (ok) diff.innerHTML = (endKm-startKm)+' km gereden';
+    else if (S.wiz.endKm) diff.innerHTML = '⚠️ Lager dan beginstand';
+    else diff.innerHTML = '';
+  }
+  if (btn) { btn.disabled = !ok; btn.className = 'wiz-next ' + (ok?'ready':''); }
+};
+
+window.wizSetType = (type) => {
+  S.wiz.tripType = type;
+  render();
+};
+
+window.wizPickAddr = (addr) => {
+  S.wiz.addr = addr;
+  render();
+};
+
+window.wizPickEndAddr = (addr) => {
+  S.wiz.endAddr = addr;
+  render();
+};
+
+window.wizAddrSug = (val) => {
+  const el = document.getElementById('wiz-addr-sug');
+  if (!el) return;
+  const saved = getSavedAddresses();
+  const matches = val.length < 1 ? [] : saved.filter(a => a.toLowerCase().includes(val.toLowerCase())).slice(0,5);
+  if (!matches.length) { el.innerHTML=''; return; }
+  el.innerHTML = matches.map(a =>
+    `<div onmousedown="wizPickAddr('${a.replace(/'/g,"\\'")}');event.preventDefault()"
+      style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:#fff;font-size:14px;margin-bottom:6px">
+      📍 ${esc(a)}
+    </div>`
+  ).join('');
+};
+
+window.wizEndAddrSug = (val) => {
+  const el = document.getElementById('wiz-endaddr-sug');
+  if (!el) return;
+  const saved = getSavedAddresses();
+  const matches = val.length < 1 ? [] : saved.filter(a => a.toLowerCase().includes(val.toLowerCase())).slice(0,5);
+  if (!matches.length) { el.innerHTML=''; return; }
+  el.innerHTML = matches.map(a =>
+    `<div onmousedown="wizPickEndAddr('${a.replace(/'/g,"\\'")}');event.preventDefault()"
+      style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:#fff;font-size:14px;margin-bottom:6px">
+      📍 ${esc(a)}
+    </div>`
+  ).join('');
+};
+
+window.wizGetGPS = () => {
+  const inp = document.getElementById('wiz-addr');
+  if (!inp) return;
+  inp.placeholder = '📍 Locatie bepalen...';
+  inp.disabled = true;
+  if (!navigator.geolocation) { inp.placeholder='GPS niet beschikbaar'; inp.disabled=false; return; }
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json&accept-language=nl`,{headers:{'User-Agent':'QLine-Rittenregistratie'}});
+        const data = await res.json();
+        const a = data.address;
+        const straat = a.road||a.pedestrian||a.path||'';
+        const nr = a.house_number||'';
+        const plaats = a.city||a.town||a.village||a.hamlet||'';
+        const adres = [straat+(nr?' '+nr:''),plaats].filter(Boolean).join(', ');
+        S.wiz.addr = adres;
+        inp.value = adres;
+        inp.disabled = false;
+        inp.placeholder = 'Adres of locatie...';
+        saveAddress(adres);
+        wizCheckNext3();
+      } catch(e) {
+        S.wiz.addr = pos.coords.latitude.toFixed(5)+', '+pos.coords.longitude.toFixed(5);
+        inp.value = S.wiz.addr;
+        inp.disabled = false;
+        wizCheckNext3();
+      }
+    },
+    () => { inp.placeholder='GPS geweigerd — typ handmatig'; inp.disabled=false; setTimeout(()=>{inp.placeholder='Adres of locatie...';},3000); },
+    {enableHighAccuracy:true,timeout:10000}
+  );
+};
+
+window.wizGetEndGPS = () => {
+  const inp = document.getElementById('wiz-endaddr');
+  if (!inp) return;
+  inp.placeholder = '📍 Locatie bepalen...';
+  inp.disabled = true;
+  if (!navigator.geolocation) { inp.placeholder='GPS niet beschikbaar'; inp.disabled=false; return; }
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json&accept-language=nl`,{headers:{'User-Agent':'QLine-Rittenregistratie'}});
+        const data = await res.json();
+        const a = data.address;
+        const straat = a.road||a.pedestrian||a.path||'';
+        const nr = a.house_number||'';
+        const plaats = a.city||a.town||a.village||a.hamlet||'';
+        const adres = [straat+(nr?' '+nr:''),plaats].filter(Boolean).join(', ');
+        S.wiz.endAddr = adres;
+        inp.value = adres;
+        inp.disabled = false;
+        inp.placeholder = 'Aankomstadres...';
+        saveAddress(adres);
+        wizCheckANext2();
+      } catch(e) {
+        S.wiz.endAddr = pos.coords.latitude.toFixed(5)+', '+pos.coords.longitude.toFixed(5);
+        inp.value = S.wiz.endAddr;
+        inp.disabled = false;
+        wizCheckANext2();
+      }
+    },
+    () => { inp.placeholder='GPS geweigerd — typ handmatig'; inp.disabled=false; setTimeout(()=>{inp.placeholder='Aankomstadres...';},3000); },
+    {enableHighAccuracy:true,timeout:10000}
+  );
+};
+
+// ── Rit starten (wizard) ──────────────────────────────────────────────────────
+window.wizStartRit = async () => {
+  if (S.saving) return;
+  S.saving = true;
+  render();
+  const { vid, km, addr, purpose, tripType } = S.wiz;
+  if (!vid || !km || !purpose) { flash('Vul alle velden in','error'); S.saving=false; render(); return; }
+  try {
+    setLastVehicle(vid);
+    const ride = {
+      vehicle_id: vid,
+      start_km: parseInt(km),
+      start_addr: addr||'',
+      purpose, trip_type: tripType,
+      dep_time: nowTime(),
+      trip_date: nowDate(),
+      user_id: S.user.uid,
+      user_name: S.profile?.full_name||S.user.email,
+      created_at: serverTimestamp(),
+    };
+    await saveAR_start(vid, ride);
+    S.saving = false;
+    flash('Goede reis! Druk op 📍 Aankomst als je er bent.');
+    go('dash');
+  } catch(e) {
+    S.saving = false;
+    flash('Fout: '+e.message,'error');
+    render();
+  }
+};
+
+// ── Rit stoppen (wizard) ──────────────────────────────────────────────────────
+window.wizStopRit = async () => {
+  if (S.saving) return;
+  S.saving = true;
+  render();
+  const vid = S.wiz.avid;
+  const endKm = parseInt(S.wiz.endKm||'0');
+  const addr = S.wiz.endAddr;
+  const time = nowTime();
+  const ride = S.activeRides[vid];
+  if (!ride) { flash('Geen actieve rit gevonden','error'); S.saving=false; render(); return; }
+  if (endKm <= ride.start_km) { flash('Eindstand moet hoger zijn dan beginstand','error'); S.saving=false; render(); return; }
+  const v = S.vehicles.find(x=>x.id===vid);
+  try {
+    saveAddress(addr);
+    saveAddress(ride.start_addr);
+    await addDoc(collection(db,'trips'),{
+      vehicle_id: vid,
+      vehicle_license: v?.license||'',
+      user_id: ride.user_id,
+      user_name: ride.user_name,
+      trip_date: ride.trip_date,
+      departure_time: ride.dep_time,
+      arrival_time: time,
+      odometer_start: ride.start_km,
+      odometer_end: endKm,
+      km_total: endKm - ride.start_km,
+      departure_address: ride.start_addr||'',
+      arrival_address: addr,
+      purpose: ride.purpose,
+      trip_type: ride.trip_type||'Zakelijk',
+      notes: '',
+      detour: false, detour_reason: '', private_km: 0,
+      status: 'open',
+      created_at: serverTimestamp(),
+    });
+    if (v) { v.last_km=endKm; v.last_addr=addr; v.last_date=ride.trip_date; }
+    setVehicleKm(vid, endKm, addr);
+    localStorage.setItem('qline_last_addr_' + vid, addr);
+    await saveAR_stop(vid);
+    await loadTrips();
+    S.saving = false;
+    flash('Rit opgeslagen ✓ — '+(endKm-ride.start_km)+' km gereden');
+    go('trips');
+  } catch(e) {
+    S.saving = false;
+    flash('Fout: '+e.message,'error');
+    render();
+  }
+};
+
+// ── Annuleer rit ──────────────────────────────────────────────────────────────
+window.annuleerRit = async (vid) => {
+  if (!vid) { flash('Geen actieve rit gevonden','error'); return; }
+  const ride = S.activeRides[vid];
+  if (ride?._docId) {
+    try { await deleteDoc(doc(db,'active_rides',ride._docId)); } catch(e) {}
+  } else {
+    try {
+      const snap = await getDocs(query(collection(db,'active_rides'),where('vehicle_id','==',vid)));
+      for (const d of snap.docs) await deleteDoc(doc(db,'active_rides',d.id));
+    } catch(e) {}
+  }
+  delete S.activeRides[vid];
+  flash('Rit geannuleerd');
+  go('dash');
+};
 
 // ── Trips list ────────────────────────────────────────────────────────────────
 function filteredTrips() {
@@ -605,7 +1004,7 @@ function renderTrips() {
   <div><div class="pt">Ritten</div><div class="ps">${trips.length} ritten · ${tot} km</div></div>
   <div style="display:flex;gap:6px">
     <button class="btn bs bsm" onclick="exportCSV()">CSV</button>
-    <button class="btn bp bsm" onclick="go('rijden')">🚗 Rijden</button>
+    <button class="btn bp bsm" onclick="goWizRijden()">🚗 Rijden</button>
   </div>
 </div>
 <div class="card" style="margin-bottom:12px">
@@ -670,7 +1069,7 @@ function tripRow(t, showApprove) {
 </div>`;
 }
 
-// ── Detail ─────────────────────────────────────────────────────────────────────
+// ── Detail ────────────────────────────────────────────────────────────────────
 function renderDetail() {
   const t = S.detailTrip;
   if (!t) return '<p>Niet gevonden.</p>';
@@ -681,7 +1080,6 @@ function renderDetail() {
     ['Totaal',`<strong style="color:var(--red)">${t.km_total||0} km</strong>`],
     ['Vertrekadres',t.departure_address||''],['Aankomstadres',t.arrival_address||''],
     ['Doel / klant',t.purpose||''],['Type rit',t.trip_type||''],
-    ['Afwijkende route',t.detour?'Ja':'Nee'],['Opmerkingen',t.notes||'-'],
     ['Status',t.status||'open'],
   ];
   return `
@@ -702,7 +1100,7 @@ function renderDetail() {
 <button class="btn bs bw" onclick="go('trips')">← Terug</button>`;
 }
 
-// ── Admin ──────────────────────────────────────────────────────────────────────
+// ── Admin ─────────────────────────────────────────────────────────────────────
 function renderAdmin() {
   return `
 <div class="ph"><div class="pt">Beheer</div></div>
@@ -711,7 +1109,7 @@ function renderAdmin() {
   <button class="tb ${S.adminTab==='users'?'on':''}" onclick="setAdminTab('users')">👥 Gebruikers</button>
   <button class="tb ${S.adminTab==='approve'?'on':''}" onclick="setAdminTab('approve')">✅ Goedkeuren (${S.trips.filter(t=>t.status==='open').length})</button>
 </div>
-${S.adminTab==='vehicles'?renderAdminVehicles():S.adminTab==='users'?renderAdminUsers():S.adminTab==='active'?renderAdminActive():renderAdminApprove()}`;
+${S.adminTab==='vehicles'?renderAdminVehicles():S.adminTab==='users'?renderAdminUsers():renderAdminApprove()}`;
 }
 
 function renderAdminVehicles() {
@@ -768,32 +1166,6 @@ function renderAdminUsers() {
 </div>`;
 }
 
-function renderAdminActive() {
-  const actief = Object.entries(S.activeRides);
-  return `
-<div class="card">
-  <div class="ch" style="display:flex;align-items:center;justify-content:space-between">
-    <span>Actieve ritten (${actief.length})</span>
-    ${actief.length>0?'<button class="btn bd bsm" onclick="resetAlleRitten()">Reset alles</button>':''}
-  </div>
-  ${actief.length===0?'<div class="empty"><div class="ei">✅</div><p>Geen actieve ritten</p></div>':''}
-  ${actief.map(([vid, ride]) => {
-    const v = S.vehicles.find(x=>x.id===vid);
-    return `<div style="padding:14px 16px;border-bottom:1px solid #f0f0f0">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-        <div>
-          <p style="font-weight:700;font-size:15px">${esc(v?.license||'?')} · ${esc(v?.brand||'')}</p>
-          <p style="font-size:13px;color:#666">Rijder: ${esc(ride.user_name||'')}</p>
-          <p style="font-size:13px;color:#666">Van: ${esc(ride.start_addr||'?')} · ${ride.start_km} km</p>
-          <p style="font-size:13px;color:#666">Doel: ${esc(ride.purpose||'')} · ${esc(ride.dep_time||'')}</p>
-        </div>
-        <button class="btn bd bsm" onclick="annuleerRit('${vid}')">✕ Annuleer</button>
-      </div>
-    </div>`;
-  }).join('')}
-</div>`;
-}
-
 function renderAdminApprove() {
   const open = S.trips.filter(t=>t.status==='open');
   return `
@@ -817,7 +1189,7 @@ function renderAdminApprove() {
 </div>`;
 }
 
-// ── Login ──────────────────────────────────────────────────────────────────────
+// ── Login ─────────────────────────────────────────────────────────────────────
 function renderLogin() {
   return `
 <div class="login-wrap">
@@ -857,21 +1229,14 @@ function bindLogin() {
   document.getElementById('lpw').onkeydown = e => { if(e.key==='Enter') doLogin(); };
 }
 
-// ── Actions ───────────────────────────────────────────────────────────────────
 function bindEvents() {}
 
+// ── Global actions ────────────────────────────────────────────────────────────
 window.doSignOut = () => signOut(auth);
-
 window.go = go;
-
 window.setFF = (k,v) => { S.ff[k]=v; render(); };
 window.resetFF = () => { S.ff={from:'',to:'',type:'',status:'',search:''}; render(); };
-
-window.setAdminTab = async (t) => {
-  S.adminTab = t;
-  if (t==='users') await loadUsers();
-  render();
-};
+window.setAdminTab = async (t) => { S.adminTab=t; if(t==='users') await loadUsers(); render(); };
 
 window.approve = async (id, status) => {
   await updateDoc(doc(db,'trips',id),{status,approved_by:S.user.uid,approved_at:serverTimestamp()});
@@ -895,8 +1260,7 @@ window.addVehicle = async () => {
   const m=document.getElementById('vm')?.value?.trim();
   if (!l) { flash('Kenteken verplicht','error'); return; }
   await addDoc(collection(db,'vehicles'),{license:l,brand:b||'',model:m||'',active:true,created_at:serverTimestamp()});
-  await loadVehicles();
-  flash('Voertuig toegevoegd ✓');
+  await loadVehicles(); flash('Voertuig toegevoegd ✓');
 };
 
 window.addUser = async () => {
@@ -913,300 +1277,23 @@ window.addUser = async () => {
 };
 
 window.deleteTrip = async (id) => {
-  // Geen confirm - blokkeert browser op mobiel
   await deleteDoc(doc(db,'trips',id));
   S.trips = S.trips.filter(t => t.id !== id);
-  if (S.detailTrip?.id === id) { S.detailTrip = null; go('trips'); return; }
-  flash('Rit verwijderd');
-  render();
+  if (S.detailTrip?.id === id) { S.detailTrip=null; go('trips'); return; }
+  flash('Rit verwijderd'); render();
 };
 
 window.changeRole = async (id, role) => {
   await updateDoc(doc(db,'users',id),{role});
   S.users = S.users.map(u => u.id===id?{...u,role}:u);
-  flash('Rol bijgewerkt ✓');
-  render();
-};
-
-// ── Rijden acties ─────────────────────────────────────────────────────────────
-window.getGPS = (fieldId) => {
-  const inp = document.getElementById(fieldId);
-  if (!inp) return;
-  const orig = inp.placeholder;
-  inp.placeholder = '📍 Locatie bepalen...';
-  inp.disabled = true;
-
-  if (!navigator.geolocation) {
-    inp.placeholder = 'GPS niet beschikbaar';
-    inp.disabled = false;
-    return;
-  }
-
-  navigator.geolocation.getCurrentPosition(
-    async (pos) => {
-      const lat = pos.coords.latitude;
-      const lon = pos.coords.longitude;
-      try {
-        // Gebruik OpenStreetMap Nominatim voor gratis reverse geocoding
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=nl`,
-          {headers: {'User-Agent': 'QLine-Rittenregistratie'}}
-        );
-        const data = await res.json();
-        const a = data.address;
-        // Bouw een mooi adres op
-        const straat = (a.road||a.pedestrian||a.path||'');
-        const nr = a.house_number||'';
-        const plaats = a.city||a.town||a.village||a.hamlet||'';
-        const adres = [straat+(nr?' '+nr:''), plaats].filter(Boolean).join(', ');
-        inp.value = adres;
-        inp.disabled = false;
-        inp.placeholder = orig;
-        // Sla op in geheugen
-        if (fieldId === 'rfrom') { if(window._state) window._state.form = window._state.form||{}; }
-        saveAddress(adres);
-      } catch(e) {
-        inp.value = lat.toFixed(5)+', '+lon.toFixed(5);
-        inp.disabled = false;
-        inp.placeholder = orig;
-      }
-    },
-    (err) => {
-      inp.placeholder = 'GPS geweigerd - typ handmatig';
-      inp.disabled = false;
-      setTimeout(() => { inp.placeholder = orig; }, 3000);
-    },
-    { enableHighAccuracy: true, timeout: 10000 }
-  );
-};
-
-window.showAddrSug = (fieldId, val) => {
-  const drop = document.getElementById('sug-'+fieldId);
-  if (!drop) return;
-  const saved = getSavedAddresses();
-  const matches = val.length < 1
-    ? saved.slice(0,6)
-    : saved.filter(a => a.toLowerCase().includes(val.toLowerCase())).slice(0,6);
-  if (!matches.length) { drop.style.display='none'; return; }
-  drop.style.display = 'block';
-  drop.innerHTML = matches.map(a =>
-    `<div class="adrop-item" onmousedown="pickAddr('${fieldId}','${a.replace(/'/g,"\'")}')">${a}</div>`
-  ).join('');
-};
-
-window.hideAddrSug = (fieldId) => {
-  const drop = document.getElementById('sug-'+fieldId);
-  if (drop) drop.style.display = 'none';
-};
-
-window.pickAddr = (fieldId, addr) => {
-  const inp = document.getElementById(fieldId);
-  if (inp) { inp.value = addr; hideAddrSug(fieldId); }
-};
-
-// Trip type knoppen
-let _tripType = 'Zakelijk';
-
-
-window.updateKmDiff = (val) => {
-  const el = document.getElementById('km-diff');
-  if (!el) return;
-  const vid = document.getElementById('avid')?.value;
-  const ride = vid ? S.activeRides[vid] : null;
-  const end = parseInt(val);
-  if (ride && !isNaN(end) && end > ride.start_km) {
-    el.innerHTML = '<span style="color:var(--red);font-weight:700;font-size:22px">' + (end - ride.start_km) + ' km gereden</span>';
-  } else {
-    el.innerHTML = end < (ride?.start_km||0) ? '<span style="color:#e74c3c;font-size:13px">Eindstand moet hoger zijn dan beginstand</span>' : '';
-  }
-};
-
-window.setTripType = (type) => {
-  _tripType = type;
-  const bz = document.getElementById('btn-zakelijk');
-  const bp = document.getElementById('btn-prive');
-  if (bz) bz.style.background = type==='Zakelijk' ? 'var(--red)' : '#f0f0f0';
-  if (bz) bz.style.color = type==='Zakelijk' ? '#fff' : '#555';
-  if (bp) bp.style.background = type==='Prive' ? '#4a1a6e' : '#f0f0f0';
-  if (bp) bp.style.color = type==='Prive' ? '#fff' : '#555';
-};
-
-// Live km verschil tonen bij aankomst
-document.addEventListener('input', e => {
-  if (e.target.id === 'akm') {
-    const el = document.getElementById('km-diff');
-    if (!el) return;
-    const vid = document.getElementById('avid')?.value;
-    const ride = vid ? S.activeRides[vid] : null;
-    const end = parseInt(e.target.value);
-    if (ride && !isNaN(end) && end > ride.start_km) {
-      el.innerHTML = '<span style="color:var(--red);font-weight:700;font-size:20px">' + (end - ride.start_km) + ' km gereden</span>';
-    } else {
-      el.innerHTML = '';
-    }
-  }
-});
-
-window.onVehicleSelect = (vid) => {
-  const info = document.getElementById('rinfo');
-  const status = document.getElementById('rstatus');
-  const kmInp = document.getElementById('rkm');
-  const fromInp = document.getElementById('rfrom');
-  if (!info || !vid) { if(info) info.style.display='none'; return; }
-  info.style.display = 'block';
-  const v = S.vehicles.find(x=>x.id===vid);
-  const lsKm = getVehicleKm(vid);
-  const savedAddr = localStorage.getItem('qline_last_addr_' + vid);
-  const lastKm = v?.last_km || lsKm?.km || '';
-  const lastAddr = savedAddr || v?.last_addr || lsKm?.addr || '';
-  if (lastKm) {
-    kmInp.value = lastKm;
-    fromInp.value = lastAddr;
-    S.vertrek.km = String(lastKm);
-    S.vertrek.addr = lastAddr;
-    if (status) status.innerHTML = 'Eindstand: <strong>'+lastKm+' km</strong> · Laatste locatie: <strong>'+(lastAddr||'onbekend')+'</strong>';
-  } else {
-    kmInp.value = '';
-    fromInp.value = '';
-    S.vertrek.km = '';
-    S.vertrek.addr = '';
-    if (status) status.innerHTML = 'Eerste rit voor dit voertuig — vul de beginstand in.';
-  }
-};
-
-window.startRitFromForm = async () => {
-  if (S.saving) return;
-  S.saving = true;
-  const vid = document.getElementById('rv')?.value;
-  const km = S.vertrek.km || document.getElementById('rkm')?.value;
-  const from = S.vertrek.addr || document.getElementById('rfrom')?.value;
-  const purpose = S.vertrek.purpose || document.getElementById('rpurpose')?.value;
-  const time = document.getElementById('rtime')?.value || nowTime();
-  await startRit(vid, km, from, purpose, _tripType || 'Zakelijk', time);
-};
-
-window.startRit = async (vid, km, from, purpose, type, time) => {
-  // Fallback: lees uit DOM als geen parameters
-  if (!vid) vid = document.getElementById('rv')?.value;
-  if (!km) km = document.getElementById('rkm')?.value;
-  if (!from) from = document.getElementById('rfrom')?.value;
-  if (!purpose) purpose = document.getElementById('rpurpose')?.value;
-  if (!time) time = document.getElementById('rtime')?.value || nowTime();
-  if (!type) type = _tripType || 'Zakelijk';
-  if (!vid)     { flash('Kies een voertuig','error'); return; }
-  if (!km)      { flash('Vul de beginstand in','error'); return; }
-  if (!purpose) { flash('Vul het doel in','error'); return; }
-  setLastVehicle(vid);
-  const ride = {
-    vehicle_id: vid,
-    start_km: parseInt(km),
-    start_addr: from||'',
-    purpose, trip_type: type,
-    dep_time: time,
-    trip_date: nowDate(),
-    user_id: S.user.uid,
-    user_name: S.profile?.full_name||S.user.email,
-    created_at: serverTimestamp(),
-  };
-  await saveAR_start(vid, ride);
-  flash('Goede reis! Druk op 📍 Aankomst als je er bent.');
-  go('dash');
-};
-
-
-
-
-
-window.annuleerRit = async (vid) => {
-  if (!vid) { flash('Geen actieve rit gevonden', 'error'); return; }
-  // Geen confirm - blokkeert browser op mobiel
-  // Verwijder uit Firebase
-  const ride = S.activeRides[vid];
-  if (ride?._docId) {
-    try { await deleteDoc(doc(db, 'active_rides', ride._docId)); } catch(e) {}
-  } else {
-    // Zoek op vehicle_id
-    try {
-      const snap = await getDocs(query(collection(db,'active_rides'), where('vehicle_id','==',vid)));
-      for (const d of snap.docs) await deleteDoc(doc(db,'active_rides',d.id));
-    } catch(e) {}
-  }
-  delete S.activeRides[vid];
-  flash('Rit geannuleerd');
-  go('dash');
+  flash('Rol bijgewerkt ✓'); render();
 };
 
 window.resetAlleRitten = async () => {
-  // Geen confirm - blokkeert browser op mobiel
   const snap = await getDocs(collection(db,'active_rides'));
   for (const d of snap.docs) await deleteDoc(doc(db,'active_rides',d.id));
   S.activeRides = {};
-  flash('Alle actieve ritten gereset');
-  go('dash');
-};
-
-window.stopRitFromForm = async () => {
-  if (S.saving) return; // Voorkom dubbel klikken
-  S.saving = true;
-  render(); // Disable knop
-  const vid   = document.getElementById('avid')?.value;
-  const endKm = parseInt(S.aankomst.km || document.getElementById('akm')?.value || '0');
-  const addr  = S.aankomst.addr || document.getElementById('aaddr')?.value?.trim() || '';
-  const time  = nowTime();
-  const notes = S.aankomst.notes || '';
-  try {
-    await stopRit(vid, endKm, addr, time, notes);
-  } catch(e) {
-    flash('Fout bij opslaan: ' + e.message, 'error');
-  }
-  S.saving = false;
-};
-
-window.stopRit = async (vid, endKm, addr, time, notes) => {
-  // Gebruik parameters OF state OR DOM als fallback
-  if (!vid)   vid   = document.getElementById('avid')?.value;
-  if (!endKm) endKm = parseInt(S.aankomst.km || document.getElementById('akm')?.value || '0');
-  if (!addr)  addr  = S.aankomst.addr || document.getElementById('aaddr')?.value?.trim() || '';
-  if (!time)  time  = document.getElementById('atime')?.value || nowTime();
-  if (!notes) notes = S.aankomst.notes || '';
-  if (!addr)  { flash('Vul het aankomstadres in','error'); return; }
-  if (!endKm) { flash('Vul de eindstand in','error'); return; }
-  const ride = S.activeRides[vid];
-  if (!ride)  { flash('Geen actieve rit gevonden','error'); return; }
-  if (endKm < ride.start_km) { flash('Eindstand moet hoger zijn dan beginstand','error'); return; }
-  const v = S.vehicles.find(x=>x.id===vid);
-  try {
-    saveAddress(addr);
-    saveAddress(ride.start_addr);
-    await addDoc(collection(db,'trips'),{
-      vehicle_id: vid,
-      vehicle_license: v?.license||'',
-      user_id: ride.user_id,
-      user_name: ride.user_name,
-      trip_date: ride.trip_date,
-      departure_time: ride.dep_time,
-      arrival_time: time,
-      odometer_start: ride.start_km,
-      odometer_end: endKm,
-      km_total: endKm > ride.start_km ? endKm - ride.start_km : 0,
-      departure_address: ride.start_addr||'',
-      arrival_address: addr,
-      purpose: ride.purpose,
-      trip_type: ride.trip_type||'Zakelijk',
-      notes: notes||'',
-      detour: false, detour_reason: '', private_km: 0,
-      status: 'open',
-      created_at: serverTimestamp(),
-    });
-    if (v) { v.last_km=endKm; v.last_addr=addr; v.last_date=ride.trip_date; }
-    setVehicleKm(vid, endKm, addr);
-    // Onthoud aankomstadres als vertrekadres voor volgende rit
-    localStorage.setItem('qline_last_addr_' + vid, addr);
-    await saveAR_stop(vid);
-    await loadTrips();
-    flash('Rit opgeslagen ✓ — '+(endKm-ride.start_km)+' km gereden');
-    go('trips');
-  } catch(e) { flash('Fout: '+e.message,'error'); }
+  flash('Alle actieve ritten gereset'); go('dash');
 };
 
 render();
