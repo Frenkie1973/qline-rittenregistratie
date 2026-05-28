@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-title" content="Q-Line Ritten"/>
 <title>Q-Line Rittenregistratie</title>
+<!-- v2.1 -->
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f5f5;color:#1a1a1a}
@@ -432,16 +433,19 @@ window.goWizRijden = () => {
 
 function renderWizRijden() {
   const step = S.wiz.step;
-  const totalSteps = 4;
-  const labels = ['Voertuig','Kilometerstand','Vertrekadres','Bevestigen'];
+  const kmKnown = !!S.wiz.km;
+  const totalSteps = kmKnown ? 3 : 4;
+  // Stap mapping: als km bekend, sla stap 2 over in weergave
+  const displayStep = (kmKnown && step >= 3) ? step - 1 : step;
+  const labels = kmKnown ? ['Voertuig','Vertrekadres','Bevestigen'] : ['Voertuig','Kilometerstand','Vertrekadres','Bevestigen'];
 
   const progressHtml = `
 <div class="wiz-progress">
   ${labels.map((l,i) => {
     const n = i+1;
-    const cls = n < step ? 'done' : n === step ? 'active' : 'todo';
-    return (i>0?`<div class="wiz-line ${n<=step?'done':''}"></div>`:'') +
-      `<div class="wiz-step-dot ${cls}">${n < step ? '✓' : n}</div>`;
+    const cls = n < displayStep ? 'done' : n === displayStep ? 'active' : 'todo';
+    return (i>0?`<div class="wiz-line ${n<=displayStep?'done':''}"></div>`:'') +
+      `<div class="wiz-step-dot ${cls}">${n < displayStep ? '✓' : n}</div>`;
   }).join('')}
 </div>`;
 
@@ -731,11 +735,21 @@ window.wizSelectAVehicle = (vid) => {
 };
 
 window.wizNext = () => {
-  if (S.wiz.step < 4) { S.wiz.step++; render(); window.scrollTo(0,0); }
+  // Stap 2 overslaan als km al bekend is
+  if (S.wiz.step === 1 && S.wiz.km) {
+    S.wiz.step = 3; render(); window.scrollTo(0,0);
+  } else if (S.wiz.step < 4) {
+    S.wiz.step++; render(); window.scrollTo(0,0);
+  }
 };
 
 window.wizBack = () => {
-  if (S.wiz.step > 1) { S.wiz.step--; render(); window.scrollTo(0,0); }
+  // Stap 2 overslaan bij terug als km bekend is
+  if (S.wiz.step === 3 && S.wiz.km) {
+    S.wiz.step = 1; render(); window.scrollTo(0,0);
+  } else if (S.wiz.step > 1) {
+    S.wiz.step--; render(); window.scrollTo(0,0);
+  }
 };
 
 window.wizANext = () => {
