@@ -913,7 +913,7 @@ window.addUser = async () => {
 };
 
 window.deleteTrip = async (id) => {
-  if (!confirm('Weet je zeker dat je deze rit wilt verwijderen? Dit kan niet ongedaan worden gemaakt.')) return;
+  // Geen confirm - blokkeert browser op mobiel
   await deleteDoc(doc(db,'trips',id));
   S.trips = S.trips.filter(t => t.id !== id);
   if (S.detailTrip?.id === id) { S.detailTrip = null; go('trips'); return; }
@@ -1119,7 +1119,7 @@ window.startRit = async (vid, km, from, purpose, type, time) => {
 
 window.annuleerRit = async (vid) => {
   if (!vid) { flash('Geen actieve rit gevonden', 'error'); return; }
-  if (!confirm('Rit annuleren? De rit wordt NIET opgeslagen.')) return;
+  // Geen confirm - blokkeert browser op mobiel
   // Verwijder uit Firebase
   const ride = S.activeRides[vid];
   if (ride?._docId) {
@@ -1137,7 +1137,7 @@ window.annuleerRit = async (vid) => {
 };
 
 window.resetAlleRitten = async () => {
-  if (!confirm('Alle actieve ritten resetten?')) return;
+  // Geen confirm - blokkeert browser op mobiel
   const snap = await getDocs(collection(db,'active_rides'));
   for (const d of snap.docs) await deleteDoc(doc(db,'active_rides',d.id));
   S.activeRides = {};
