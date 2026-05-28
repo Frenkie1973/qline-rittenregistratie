@@ -254,16 +254,23 @@ async function loadUsers() {
   S.users = snap.docs.map(d => ({id:d.id,...d.data()}));
 }
 
-async function loadVehicleStatus() {
+function loadVehicleStatus() {
+  // Gebruik al geladen trips - geen extra Firebase queries nodig
   for (const v of S.vehicles) {
-    try {
-      const snap = await getDocs(query(collection(db,'trips'),where('vehicle_id','==',v.id),orderBy('trip_date','desc'),limit(1)));
-      if (!snap.empty) {
-        let best = null;
-        snap.docs.forEach(d => { const t=d.data(); if(!best||(t.odometer_end||0)>(best.odometer_end||0)) best=t; });
-        if (best) { v.last_km=best.odometer_end; v.last_addr=best.arrival_address; v.last_date=best.trip_date; }
-      }
-    } catch(e) {}
+    const vTrips = S.trips.filter(t => t.vehicle_id === v.id && t.odometer_end);
+    if (vTrips.length > 0) {
+      // Sorteer op datum en pak de laatste
+      const last = vTrips.sort((a,b) => (b.trip_date||'').localeCompare(a.trip_date||''))[0];
+      v.last_km   = last.odometer_end;
+      v.last_addr = last.arrival_address;
+      v.last_date = last.trip_date;
+    }
+    // Overschrijf met localStorage als die nieuwer is
+    const lsData = getVehicleKm(v.id);
+    if (lsData && (!v.last_km || lsData.km >= v.last_km)) {
+      v.last_km   = lsData.km;
+      v.last_addr = lsData.addr;
+    }
   }
 }
 
