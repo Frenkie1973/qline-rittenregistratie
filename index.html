@@ -172,11 +172,19 @@ async function saveAR_start(vid, ride) {
 }
 
 async function saveAR_stop(vid) {
-  // Verwijder actieve rit uit Firebase
-  const ride = S.activeRides[vid];
-  if (ride?._docId) {
-    try { await deleteDoc(doc(db,'active_rides', ride._docId)); } catch(e) {}
-  }
+  // Verwijder actieve rit uit Firebase - altijd op vehicle_id zoeken
+  try {
+    // Via _docId als bekend
+    const ride = S.activeRides[vid];
+    if (ride?._docId) {
+      await deleteDoc(doc(db,'active_rides', ride._docId));
+    }
+    // Ook zoeken op vehicle_id voor zekerheid
+    const snap = await getDocs(query(collection(db,'active_rides'), where('vehicle_id','==',vid)));
+    for (const d of snap.docs) {
+      await deleteDoc(doc(db,'active_rides', d.id));
+    }
+  } catch(e) { console.log('saveAR_stop error:', e); }
   delete S.activeRides[vid];
 }
 
