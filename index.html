@@ -475,19 +475,37 @@ ${cards}
 
   else if (step === 2) {
     const v = S.vehicles.find(x => x.id === S.wiz.vid);
-    const hint = v?.last_km ? `Laatste bekende stand: <strong>${v.last_km} km</strong>` : 'Eerste rit voor dit voertuig';
-    content = `
+    const hasKnownKm = !!S.wiz.km;
+
+    if (hasKnownKm) {
+      // Bekende stand — toon ter bevestiging, geen invoer nodig
+      content = `
+<div class="wiz-label">Stap 2 van ${totalSteps}</div>
+<div class="wiz-question">Klopt de kilometerstand?</div>
+<div style="background:#f8f8f8;border:2px solid var(--red);border-radius:14px;padding:24px;text-align:center;margin-bottom:20px">
+  <div style="font-size:48px;font-weight:800;color:var(--red);letter-spacing:-1px">${esc(S.wiz.km)}</div>
+  <div style="font-size:15px;color:#888;margin-top:4px">km — ${esc(v?.license||'')} · ${esc(v?.brand||'')}</div>
+</div>
+<button class="wiz-next ready" onclick="wizNext()">✓ Klopt — verder</button>
+<button onclick="wizKmCorrect()" style="width:100%;margin-top:10px;padding:14px;background:#fff;border:1px solid var(--border);border-radius:10px;font-size:15px;cursor:pointer;color:#555">
+  ✏️ Andere stand invullen
+</button>`;
+    } else {
+      // Geen stand bekend — moet invullen
+      content = `
 <div class="wiz-label">Stap 2 van ${totalSteps}</div>
 <div class="wiz-question">Wat is de huidige kilometerstand?</div>
-<div class="alert ai" style="margin-bottom:16px">${hint}</div>
-<input class="wiz-input-big" type="number" id="wiz-km" value="${esc(S.wiz.km)}"
+<div class="alert aw" style="margin-bottom:16px">Eerste rit voor dit voertuig — vul de beginstand in</div>
+<input class="wiz-input-big" type="number" id="wiz-km" value=""
   placeholder="bijv. 171962"
   oninput="S.wiz.km=this.value;wizCheckNext2()"
-  inputmode="numeric"/>
+  inputmode="numeric" autofocus/>
 <div class="wiz-hint">Vul de stand in zoals op de teller</div>
-<button class="wiz-next ${S.wiz.km?'ready':''}" id="wiz-next2" onclick="wizNext()" ${S.wiz.km?'':'disabled'}>
+<button class="wiz-next" id="wiz-next2" onclick="wizNext()" disabled>
   Volgende →
 </button>`;
+    }
+  }
   }
 
   else if (step === 3) {
@@ -730,6 +748,13 @@ window.wizABack = () => {
   const actief = S.vehicles.filter(v => S.activeRides[v.id]);
   const minStep = actief.length > 1 ? 1 : 2;
   if (S.wiz.step > minStep) { S.wiz.step--; render(); window.scrollTo(0,0); }
+};
+
+window.wizKmCorrect = () => {
+  // Wis de bekende stand zodat invoerveld getoond wordt
+  S.wiz.km = '';
+  render();
+  setTimeout(() => document.getElementById('wiz-km')?.focus(), 100);
 };
 
 window.wizCheckNext2 = () => {
