@@ -163,6 +163,8 @@ const isAdmin = () => S.profile?.role === 'admin';
 const pad = n => String(n).padStart(2,'0');
 const nowTime = () => { const d=new Date(); return pad(d.getHours())+':'+pad(d.getMinutes()); };
 const nowDate = () => { const d=new Date(); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); };
+window.nowDate = nowDate;
+window.nowTime = nowTime;
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
 function flash(msg, type='success') {
@@ -403,10 +405,9 @@ ${pvArr.length>0?`
 </div>`:''}
 ${(() => {
   const today = nowDate();
-  // Medewerker ziet eigen ritten vandaag, admin ziet alle ritten vandaag
-  const todayTrips = S.trips.filter(t =>
-    t.trip_date === today && (isAdmin() || t.user_id === S.user.uid)
-  );
+  // Medewerker ziet eigen ritten vandaag (al gefilterd door Firebase query)
+  // Admin ziet alle ritten vandaag
+  const todayTrips = S.trips.filter(t => t.trip_date === today);
   if (!todayTrips.length) return '';
   return `
 <div class="card" style="border-left:4px solid #27ae60">
