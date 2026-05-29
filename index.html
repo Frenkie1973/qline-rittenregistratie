@@ -56,6 +56,7 @@ textarea{resize:vertical;min-height:70px}
 .spin{display:flex;justify-content:center;padding:48px 0}
 .sr{width:36px;height:36px;border:3px solid #e0e0e0;border-top-color:var(--red);border-radius:50%;animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.2)}}
 .tri{padding:14px 16px;cursor:pointer;border-bottom:1px solid #f0f0f0;transition:.15s}
 .tri:last-child{border-bottom:none}
 .tri:hover{background:#fafafa}
@@ -499,7 +500,10 @@ function renderWizRijden() {
 
     content = `
 <div class="wiz-label">Stap 1 van ${totalSteps}</div>
-<div class="wiz-question">Welke auto neem je?</div>
+<div class="wiz-question">Welke auto neem je?
+  <button id="mic-btn-vehicle" onclick="speechSelectVehicle()" title="Spreek de autonaam in"
+    style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:18px;margin-left:10px;vertical-align:middle">🎤</button>
+</div>
 ${cards}
 <button class="wiz-next ${S.wiz.vid?'ready':''}" onclick="wizNext()" ${S.wiz.vid?'':'disabled'}>
   Volgende →
@@ -529,14 +533,16 @@ ${cards}
 <div class="wiz-label">Stap 2 van ${totalSteps}</div>
 <div class="wiz-question">Wat is de huidige kilometerstand?</div>
 <div class="alert aw" style="margin-bottom:16px">Eerste rit voor dit voertuig — vul de beginstand in</div>
-<input class="wiz-input-big" type="number" id="wiz-km" value=""
-  placeholder="bijv. 171962"
-  oninput="S.wiz.km=this.value;wizCheckNext2()"
-  inputmode="numeric" autofocus/>
-<div class="wiz-hint">Vul de stand in zoals op de teller</div>
-<button class="wiz-next" id="wiz-next2" onclick="wizNext()" disabled>
-  Volgende →
-</button>`;
+<div style="display:flex;gap:8px;align-items:center">
+  <input class="wiz-input-big" type="number" id="wiz-km" value=""
+    placeholder="bijv. 171962"
+    oninput="S.wiz.km=this.value;wizCheckNext2()"
+    inputmode="numeric" autofocus style="flex:1"/>
+  <button id="mic-btn-km" onclick="speechKm()" title="Spreek de kilometerstand in"
+    style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:10px;padding:12px 14px;cursor:pointer;font-size:22px;flex-shrink:0">🎤</button>
+</div>
+<div class="wiz-hint">Tik of spreek de stand in</div>
+<button class="wiz-next" id="wiz-next2" onclick="wizNext()" disabled>Volgende →</button>`;
     }
   }
 
@@ -549,8 +555,6 @@ ${cards}
       </div>`
     ).join('');
 
-    // Km correctie: inline invoerveld tonen als nodig
-    const kmCorrectMode = S.wiz._kmCorrect;
     content = `
 <div class="wiz-label">Stap ${displayStep} van ${totalSteps}</div>
 <div class="wiz-question">Waar vertrek je vandaan?</div>
@@ -558,9 +562,12 @@ ${cards}
 ${kmCorrectMode ? `
 <div style="margin-bottom:16px">
   <label style="font-size:13px;font-weight:600;color:#555;display:block;margin-bottom:6px">Kilometerstand corrigeren</label>
-  <input class="wiz-input-big" type="number" id="wiz-km-fix" value="${esc(S.wiz.km)}"
-    placeholder="bijv. 171962" inputmode="numeric"
-    oninput="S.wiz.km=this.value;document.getElementById('wiz-km-disp').textContent=this.value"/>
+  <div style="display:flex;gap:8px;align-items:center">
+    <input class="wiz-input-big" type="number" id="wiz-km-fix" value="${esc(S.wiz.km)}"
+      placeholder="bijv. 171962" inputmode="numeric" style="flex:1"
+      oninput="S.wiz.km=this.value;document.getElementById('wiz-km-disp').textContent=this.value"/>
+    <button id="mic-btn-km" onclick="speechKm()" style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:10px;padding:12px 14px;cursor:pointer;font-size:22px;flex-shrink:0">🎤</button>
+  </div>
   <button onclick="S.wiz._kmCorrect=false;render()" style="margin-top:8px;width:100%;padding:10px;background:#f0f0f0;border:none;border-radius:8px;cursor:pointer;font-size:14px">✓ Opslaan</button>
 </div>` : `
 <div style="display:flex;align-items:center;justify-content:space-between;background:#f8f8f8;border-radius:8px;padding:10px 14px;margin-bottom:14px">
@@ -573,11 +580,13 @@ ${kmCorrectMode ? `
     placeholder="Adres of locatie..."
     oninput="S.wiz.addr=this.value;wizCheckNext3();wizAddrSug(this.value)"
     autocomplete="off" style="flex:1"/>
+  <button id="mic-btn-addr" onclick="speechAddr()" title="Spreek het adres in"
+    style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:10px;padding:10px 14px;cursor:pointer;font-size:22px;flex-shrink:0">🎤</button>
   <button class="wiz-gps-btn" onclick="wizGetGPS()">📍</button>
 </div>
 <div id="wiz-addr-sug" style="margin-bottom:12px"></div>
 ${S.wiz.addr?'':suggestions}
-<div class="wiz-hint">Tik het adres of gebruik 📍 voor automatische locatie</div>
+<div class="wiz-hint">Tik, spreek 🎤 of gebruik 📍 voor GPS</div>
 <button class="wiz-next ${S.wiz.addr&&!kmCorrectMode?'ready':''}" id="wiz-next3" onclick="wizNext()" ${S.wiz.addr&&!kmCorrectMode?'':'disabled'}>
   Volgende →
 </button>`;
@@ -589,10 +598,13 @@ ${S.wiz.addr?'':suggestions}
     content = `
 <div class="wiz-label">Stap 4 van ${totalSteps}</div>
 <div class="wiz-question">Wat is het doel van de rit?</div>
-<input class="wiz-input-std" type="text" id="wiz-purpose" value="${esc(S.wiz.purpose)}"
-  placeholder="bijv. klantbezoek, levering, ophalen..."
-  oninput="S.wiz.purpose=this.value;wizCheckNext4()"
-  style="margin-bottom:20px"/>
+<div style="display:flex;gap:8px;margin-bottom:20px">
+  <input class="wiz-input-std" type="text" id="wiz-purpose" value="${esc(S.wiz.purpose)}"
+    placeholder="bijv. klantbezoek, levering, ophalen..."
+    oninput="S.wiz.purpose=this.value;wizCheckNext4()" style="flex:1"/>
+  <button id="mic-btn-purpose" onclick="speechPurpose()" title="Spreek het doel in"
+    style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:10px;padding:10px 14px;cursor:pointer;font-size:22px;flex-shrink:0">🎤</button>
+</div>
 
 <div style="font-size:14px;font-weight:600;color:#555;margin-bottom:10px">Type rit</div>
 <div class="wiz-type-grid" style="margin-bottom:20px">
@@ -711,10 +723,13 @@ ${ride?`<div class="alert ai" style="margin-bottom:16px">Vertrok van <strong>${e
     placeholder="Aankomstadres..."
     oninput="S.wiz.endAddr=this.value;wizCheckANext2();wizEndAddrSug(this.value)"
     autocomplete="off" style="flex:1"/>
+  <button id="mic-btn-endaddr" onclick="speechEndAddr()" title="Spreek het adres in"
+    style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:10px;padding:10px 14px;cursor:pointer;font-size:22px;flex-shrink:0">🎤</button>
   <button class="wiz-gps-btn" onclick="wizGetEndGPS()">📍</button>
 </div>
 <div id="wiz-endaddr-sug" style="margin-bottom:12px"></div>
 ${S.wiz.endAddr?'':suggestions}
+<div class="wiz-hint">Tik, spreek 🎤 of gebruik 📍 voor GPS</div>
 <button class="wiz-next ${S.wiz.endAddr?'ready':''}" id="wiz-anext2" onclick="wizANext()" ${S.wiz.endAddr?'':'disabled'}>Volgende →</button>`;
   }
 
@@ -729,10 +744,14 @@ ${S.wiz.endAddr?'':suggestions}
 <div class="wiz-label">Stap ${actief.length>1?3:2} van ${totalSteps}</div>
 <div class="wiz-question">Wat is de eindstand?</div>
 <div class="alert ai" style="margin-bottom:16px">Beginstand was <strong>${startKm} km</strong></div>
-<input class="wiz-input-big" type="number" id="wiz-endkm" value="${esc(S.wiz.endKm)}"
-  placeholder="bijv. 172045"
-  oninput="S.wiz.endKm=this.value;wizCheckANext3()"
-  inputmode="numeric"/>
+<div style="display:flex;gap:8px;align-items:center">
+  <input class="wiz-input-big" type="number" id="wiz-endkm" value="${esc(S.wiz.endKm)}"
+    placeholder="bijv. 172045"
+    oninput="S.wiz.endKm=this.value;wizCheckANext3()"
+    inputmode="numeric" style="flex:1"/>
+  <button id="mic-btn-endkm" onclick="speechEndKm()" title="Spreek de kilometerstand in"
+    style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:10px;padding:12px 14px;cursor:pointer;font-size:22px;flex-shrink:0">🎤</button>
+</div>
 <div class="wiz-km-diff" id="wiz-km-diff">
   ${diff>0 ? diff+' km gereden' : S.wiz.endKm ? '⚠️ Lager dan beginstand' : ''}
 </div>
@@ -763,7 +782,110 @@ ${S.wiz.endAddr?'':suggestions}
 </div>`;
 }
 
-// ── Wizard event handlers ─────────────────────────────────────────────────────
+// ── Spraakherkenning ──────────────────────────────────────────────────────────
+window.startSpeech = (mode, onResult) => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { alert('Spraakherkenning niet beschikbaar in deze browser.'); return; }
+
+  const rec = new SR();
+  rec.lang = 'nl-NL';
+  rec.interimResults = false;
+  rec.maxAlternatives = 1;
+
+  // Visuele feedback
+  const btn = document.getElementById('mic-btn-' + mode);
+  if (btn) { btn.textContent = '🔴'; btn.style.animation = 'pulse 1s infinite'; }
+
+  rec.onresult = (e) => {
+    const transcript = e.results[0][0].transcript.trim();
+    if (btn) { btn.textContent = '🎤'; btn.style.animation = ''; }
+    onResult(transcript);
+  };
+  rec.onerror = () => {
+    if (btn) { btn.textContent = '🎤'; btn.style.animation = ''; }
+  };
+  rec.onend = () => {
+    if (btn) { btn.textContent = '🎤'; btn.style.animation = ''; }
+  };
+  rec.start();
+};
+
+window.speechSelectVehicle = () => {
+  startSpeech('vehicle', (text) => {
+    const t = text.toLowerCase();
+    const match = S.vehicles.find(v =>
+      v.license.toLowerCase().includes(t) ||
+      (v.brand||'').toLowerCase().includes(t) ||
+      (v.model||'').toLowerCase().includes(t)
+    );
+    if (match && !S.activeRides[match.id]) {
+      wizSelectVehicle(match.id);
+      // Auto door naar volgende stap
+      setTimeout(() => wizNext(), 600);
+    } else {
+      const btn = document.getElementById('mic-btn-vehicle');
+      if (btn) btn.textContent = '❓';
+      setTimeout(() => { if(btn) btn.textContent = '🎤'; }, 2000);
+    }
+  });
+};
+
+window.speechKm = () => {
+  startSpeech('km', (text) => {
+    // Haal alleen cijfers eruit
+    const num = text.replace(/[^0-9]/g, '');
+    if (num) {
+      S.wiz.km = num;
+      const inp = document.getElementById('wiz-km');
+      if (inp) inp.value = num;
+      wizCheckNext2();
+      setTimeout(() => wizNext(), 600);
+    }
+  });
+};
+
+window.speechAddr = () => {
+  startSpeech('addr', (text) => {
+    S.wiz.addr = text;
+    const inp = document.getElementById('wiz-addr');
+    if (inp) inp.value = text;
+    saveAddress(text);
+    wizCheckNext3();
+    setTimeout(() => wizNext(), 600);
+  });
+};
+
+window.speechPurpose = () => {
+  startSpeech('purpose', (text) => {
+    S.wiz.purpose = text;
+    const inp = document.getElementById('wiz-purpose');
+    if (inp) inp.value = text;
+    wizCheckNext4();
+  });
+};
+
+window.speechEndAddr = () => {
+  startSpeech('endaddr', (text) => {
+    S.wiz.endAddr = text;
+    const inp = document.getElementById('wiz-endaddr');
+    if (inp) inp.value = text;
+    saveAddress(text);
+    wizCheckANext2();
+    setTimeout(() => wizANext(), 600);
+  });
+};
+
+window.speechEndKm = () => {
+  startSpeech('endkm', (text) => {
+    const num = text.replace(/[^0-9]/g, '');
+    if (num) {
+      S.wiz.endKm = num;
+      const inp = document.getElementById('wiz-endkm');
+      if (inp) inp.value = num;
+      wizCheckANext3();
+    }
+  });
+};
 window.wizSelectVehicle = (vid) => {
   S.wiz.vid = vid;
   const v = S.vehicles.find(x => x.id === vid);
