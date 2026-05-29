@@ -1330,8 +1330,8 @@ window.approve = async (id, status) => {
 
 window.exportCSV = () => {
   const trips = filteredTrips();
-  const hdr = ['Datum','Rijder','Kenteken','Begin','Eind','km','Van','Naar','Doel','Type','Status'];
-  const rows = trips.map(t=>[t.trip_date,t.user_name,t.vehicle_license,t.odometer_start,t.odometer_end,t.km_total,t.departure_address,t.arrival_address,t.purpose,t.trip_type,t.status].map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(';'));
+  const hdr = ['Datum','Rijder','Kenteken','Vertrektijd','Aankomsttijd','Begin km','Eind km','Totaal km','Van','Naar','Doel','Type','Status'];
+  const rows = trips.map(t=>[t.trip_date,t.user_name,t.vehicle_license,t.departure_time,t.arrival_time,t.odometer_start,t.odometer_end,t.km_total,t.departure_address,t.arrival_address,t.purpose,t.trip_type,t.status].map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(';'));
   const csv = '\uFEFF'+[hdr.join(';'),...rows].join('\n');
   const a = Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([csv],{type:'text/csv'})),download:'ritten.csv'});
   a.click();
