@@ -820,26 +820,23 @@ window.speechSelectVehicle = () => {
     );
     if (match && !S.activeRides[match.id]) {
       wizSelectVehicle(match.id);
-      // Auto door naar volgende stap
-      setTimeout(() => wizNext(), 600);
     } else {
       const btn = document.getElementById('mic-btn-vehicle');
-      if (btn) btn.textContent = '❓';
-      setTimeout(() => { if(btn) btn.textContent = '🎤'; }, 2000);
+      if (btn) { btn.textContent = '❓'; setTimeout(() => { btn.textContent = '🎤'; }, 2000); }
     }
   });
 };
 
 window.speechKm = () => {
   startSpeech('km', (text) => {
-    // Haal alleen cijfers eruit
     const num = text.replace(/[^0-9]/g, '');
     if (num) {
       S.wiz.km = num;
-      const inp = document.getElementById('wiz-km');
-      if (inp) inp.value = num;
+      const inp = document.getElementById('wiz-km') || document.getElementById('wiz-km-fix');
+      if (inp) { inp.value = num; inp.focus(); }
+      const disp = document.getElementById('wiz-km-disp');
+      if (disp) disp.textContent = num;
       wizCheckNext2();
-      setTimeout(() => wizNext(), 600);
     }
   });
 };
@@ -848,10 +845,9 @@ window.speechAddr = () => {
   startSpeech('addr', (text) => {
     S.wiz.addr = text;
     const inp = document.getElementById('wiz-addr');
-    if (inp) inp.value = text;
+    if (inp) { inp.value = text; inp.focus(); }
     saveAddress(text);
     wizCheckNext3();
-    setTimeout(() => wizNext(), 600);
   });
 };
 
@@ -859,7 +855,7 @@ window.speechPurpose = () => {
   startSpeech('purpose', (text) => {
     S.wiz.purpose = text;
     const inp = document.getElementById('wiz-purpose');
-    if (inp) inp.value = text;
+    if (inp) { inp.value = text; inp.focus(); }
     wizCheckNext4();
   });
 };
@@ -868,10 +864,9 @@ window.speechEndAddr = () => {
   startSpeech('endaddr', (text) => {
     S.wiz.endAddr = text;
     const inp = document.getElementById('wiz-endaddr');
-    if (inp) inp.value = text;
+    if (inp) { inp.value = text; inp.focus(); }
     saveAddress(text);
     wizCheckANext2();
-    setTimeout(() => wizANext(), 600);
   });
 };
 
@@ -881,7 +876,7 @@ window.speechEndKm = () => {
     if (num) {
       S.wiz.endKm = num;
       const inp = document.getElementById('wiz-endkm');
-      if (inp) inp.value = num;
+      if (inp) { inp.value = num; inp.focus(); }
       wizCheckANext3();
     }
   });
@@ -939,38 +934,45 @@ window.wizKmCorrect = () => {
 
 window.wizCheckNext2 = () => {
   const btn = document.getElementById('wiz-next2');
-  if (btn) { btn.disabled = !S.wiz.km; btn.className = 'wiz-next ' + (S.wiz.km?'ready':''); }
+  if (!btn) return;
+  btn.disabled = !S.wiz.km;
+  btn.className = 'wiz-next ' + (S.wiz.km ? 'ready' : '');
 };
 
 window.wizCheckNext3 = () => {
   const btn = document.getElementById('wiz-next3');
-  if (btn) { btn.disabled = !S.wiz.addr; btn.className = 'wiz-next ' + (S.wiz.addr?'ready':''); }
+  if (!btn) return;
+  const ok = !!S.wiz.addr && !S.wiz._kmCorrect;
+  btn.disabled = !ok;
+  btn.className = 'wiz-next ' + (ok ? 'ready' : '');
 };
 
 window.wizCheckNext4 = () => {
   const btn = document.getElementById('wiz-confirm');
-  const ok = S.wiz.purpose && S.wiz.tripType;
-  if (btn) { btn.disabled = !ok; btn.className = 'wiz-next ' + (ok?'ready':''); }
+  if (!btn) return;
+  const ok = !!(S.wiz.purpose && S.wiz.tripType);
+  btn.disabled = !ok;
+  btn.className = 'wiz-next ' + (ok ? 'ready' : '');
 };
 
 window.wizCheckANext2 = () => {
   const btn = document.getElementById('wiz-anext2');
-  if (btn) { btn.disabled = !S.wiz.endAddr; btn.className = 'wiz-next ' + (S.wiz.endAddr?'ready':''); }
+  if (!btn) return;
+  btn.disabled = !S.wiz.endAddr;
+  btn.className = 'wiz-next ' + (S.wiz.endAddr ? 'ready' : '');
 };
 
 window.wizCheckANext3 = () => {
   const btn = document.getElementById('wiz-aconfirm');
   const diff = document.getElementById('wiz-km-diff');
   const ride = S.activeRides[S.wiz.avid];
-  const endKm = parseInt(S.wiz.endKm||'0');
+  const endKm = parseInt(S.wiz.endKm || '0');
   const startKm = ride?.start_km || 0;
   const ok = endKm > startKm;
-  if (diff) {
-    if (ok) diff.innerHTML = (endKm-startKm)+' km gereden';
-    else if (S.wiz.endKm) diff.innerHTML = '⚠️ Lager dan beginstand';
-    else diff.innerHTML = '';
-  }
-  if (btn) { btn.disabled = !ok; btn.className = 'wiz-next ' + (ok?'ready':''); }
+  if (diff) diff.innerHTML = ok ? (endKm - startKm) + ' km gereden' : S.wiz.endKm ? '⚠️ Lager dan beginstand' : '';
+  if (!btn) return;
+  btn.disabled = !ok;
+  btn.className = 'wiz-next ' + (ok ? 'ready' : '');
 };
 
 window.wizSetType = (type) => {
