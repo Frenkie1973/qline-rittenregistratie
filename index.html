@@ -1309,14 +1309,45 @@ function renderDetail() {
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 function renderAdmin() {
+  const actCnt = Object.keys(S.activeRides).length;
   return `
 <div class="ph"><div class="pt">Beheer</div></div>
 <div class="tab-bar">
   <button class="tb ${S.adminTab==='vehicles'?'on':''}" onclick="setAdminTab('vehicles')">🚗 Voertuigen</button>
   <button class="tb ${S.adminTab==='users'?'on':''}" onclick="setAdminTab('users')">👥 Gebruikers</button>
-  <button class="tb ${S.adminTab==='approve'?'on':''}" onclick="setAdminTab('approve')">✅ Goedkeuren (${S.trips.filter(t=>t.status==='open').length})</button>
+  <button class="tb ${S.adminTab==='active'?'on':''}" onclick="setAdminTab('active')" style="${actCnt>0?'color:var(--red);font-weight:700':''}">⚠️ Actief (${actCnt})</button>
+  <button class="tb ${S.adminTab==='approve'?'on':''}" onclick="setAdminTab('approve')">✅ Goed (${S.trips.filter(t=>t.status==='open').length})</button>
 </div>
-${S.adminTab==='vehicles'?renderAdminVehicles():S.adminTab==='users'?renderAdminUsers():renderAdminApprove()}`;
+${S.adminTab==='vehicles'?renderAdminVehicles():S.adminTab==='users'?renderAdminUsers():S.adminTab==='active'?renderAdminActive():renderAdminApprove()}`;
+}
+
+function renderAdminActive() {
+  const actief = Object.entries(S.activeRides);
+  return `
+<div class="card">
+  <div class="ch" style="display:flex;align-items:center;justify-content:space-between">
+    <span>Actieve ritten (${actief.length})</span>
+    ${actief.length>0?`<button class="btn bd bsm" onclick="resetAlleRitten()">Reset alles</button>`:''}
+  </div>
+  ${actief.length===0?'<div class="empty"><div class="ei">✅</div><p>Geen vastgelopen ritten</p></div>':''}
+  ${actief.map(([vid, ride]) => {
+    const v = S.vehicles.find(x=>x.id===vid);
+    return `<div style="padding:14px 16px;border-bottom:1px solid #f0f0f0">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div>
+          <p style="font-weight:700;font-size:16px">${esc(v?.license||'?')} · ${esc(v?.brand||'')}</p>
+          <p style="font-size:13px;color:#666;margin-top:2px">👤 ${esc(ride.user_name||'')}</p>
+          <p style="font-size:13px;color:#666">📍 Van: ${esc(ride.start_addr||'?')}</p>
+          <p style="font-size:13px;color:#666">🎯 Doel: ${esc(ride.purpose||'')} · ${esc(ride.dep_time||'')}</p>
+          <p style="font-size:13px;color:#666">🔢 Beginstand: ${ride.start_km} km</p>
+        </div>
+        <button class="btn bd bsm" style="flex-shrink:0;margin-top:4px" onclick="annuleerRit('${vid}')">
+          ✕ Reset
+        </button>
+      </div>
+    </div>`;
+  }).join('')}
+</div>`;
 }
 
 function renderAdminVehicles() {
@@ -1443,7 +1474,12 @@ window.doSignOut = () => signOut(auth);
 window.go = go;
 window.setFF = (k,v) => { S.ff[k]=v; render(); };
 window.resetFF = () => { S.ff={from:'',to:'',type:'',status:'',search:''}; render(); };
-window.setAdminTab = async (t) => { S.adminTab=t; if(t==='users') await loadUsers(); render(); };
+window.setAdminTab = async (t) => {
+  S.adminTab = t;
+  if (t === 'users') await loadUsers();
+  if (t === 'active') await loadAR();
+  render();
+};
 
 window.approve = async (id, status) => {
   await updateDoc(doc(db,'trips',id),{status,approved_by:S.user.uid,approved_at:serverTimestamp()});
