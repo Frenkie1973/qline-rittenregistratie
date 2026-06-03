@@ -580,6 +580,8 @@ ${kmCorrectMode ? `
     placeholder="Adres of locatie..."
     oninput="S.wiz.addr=this.value;wizCheckNext3();wizAddrSug(this.value)"
     autocomplete="off" style="flex:1"/>
+  ${S.wiz.addr ? `<button onclick="S.wiz.addr='';document.getElementById('wiz-addr').value='';document.getElementById('wiz-addr').focus();wizCheckNext3()"
+    style="background:#fee;border:1px solid #fcc;border-radius:10px;padding:10px 14px;cursor:pointer;font-size:18px;flex-shrink:0">✕</button>` : ''}
   <button id="mic-btn-addr" onclick="speechAddr()" title="Spreek het adres in"
     style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:10px;padding:10px 14px;cursor:pointer;font-size:22px;flex-shrink:0">🎤</button>
   <button class="wiz-gps-btn" onclick="wizGetGPS()">📍</button>
