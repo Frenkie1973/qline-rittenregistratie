@@ -548,6 +548,7 @@ ${cards}
 
   else if (step === 3) {
     const saved = getSavedAddresses();
+    const kmCorrectMode = S.wiz._kmCorrect;
     const suggestions = saved.slice(0,4).map(a =>
       `<div onclick="wizPickAddr('${a.replace(/'/g,"\\'")}')"
         style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:#fff;font-size:14px;margin-bottom:8px">
