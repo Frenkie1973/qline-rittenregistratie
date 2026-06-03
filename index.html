@@ -1372,15 +1372,29 @@ function renderAdminVehicles() {
 <div class="card">
   <div class="ch">Voertuigen (${S.vehicles.length})</div>
   ${S.vehicles.map(v=>`
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #f0f0f0">
-    <div style="flex:1">
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <span style="font-family:monospace;font-weight:700;font-size:15px">${esc(v.license)}</span>
-        <span style="color:#888;font-size:13px">${esc(v.brand||'')} ${esc(v.model||'')}</span>
-        ${v.last_km?`<span style="background:#f0f4ff;color:#1a3c8f;padding:3px 10px;border-radius:20px;font-size:13px;font-weight:600">📍 ${v.last_km} km</span>`:'<span style="color:#ccc;font-size:12px">nog geen ritten</span>'}
+  <div style="padding:14px 16px;border-bottom:1px solid #f0f0f0">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-family:monospace;font-weight:700;font-size:15px">${esc(v.license)}</span>
+          <span style="color:#888;font-size:13px">${esc(v.brand||'')} ${esc(v.model||'')}</span>
+          ${v.last_km?`<span style="background:#f0f4ff;color:#1a3c8f;padding:3px 10px;border-radius:20px;font-size:13px;font-weight:600">📍 ${v.last_km} km</span>`:'<span style="color:#ccc;font-size:12px">nog geen ritten</span>'}
+        </div>
+        ${v.last_addr?`<div style="font-size:12px;color:#aaa;margin-top:4px">Laatste locatie: ${esc(v.last_addr)}</div>`:''}
       </div>
-      ${v.last_addr?`<div style="font-size:12px;color:#aaa;margin-top:4px">Laatste locatie: ${esc(v.last_addr)} · ${esc(v.last_date||'')}</div>`:''}
+      <button class="btn bs bsm" onclick="editVehicleKm('${v.id}','${esc(v.license)}',${v.last_km||0})">✏️ km</button>
     </div>
+    ${S._editKmVid===v.id ? `
+    <div style="margin-top:12px;padding:12px;background:#f8f8f8;border-radius:8px">
+      <label style="font-size:13px;font-weight:600;color:#555;display:block;margin-bottom:6px">Kilometerstand aanpassen voor ${esc(v.license)}</label>
+      <div style="display:flex;gap:8px">
+        <input type="number" id="edit-km-inp" value="${v.last_km||''}" placeholder="bijv. 172245"
+          style="font-size:20px;padding:10px;border:2px solid var(--red);border-radius:8px;flex:1;font-weight:700;text-align:center"
+          inputmode="numeric"/>
+        <button class="btn bp" onclick="saveVehicleKm('${v.id}')" style="padding:10px 16px">✓</button>
+        <button class="btn bs" onclick="S._editKmVid=null;render()" style="padding:10px 16px">✕</button>
+      </div>
+    </div>` : ''}
   </div>`).join('')}
 </div>`;
 }
@@ -1523,6 +1537,39 @@ window.addUser = async () => {
     flash('Gebruiker aangemaakt ✓');
     await loadUsers(); render();
   } catch(err) { flash('Fout: '+err.message,'error'); }
+};
+
+window.editVehicleKm = (vid) => {
+  S._editKmVid = S._editKmVid === vid ? null : vid;
+  render();
+  if (S._editKmVid) setTimeout(() => document.getElementById('edit-km-inp')?.focus(), 50);
+};
+
+window.saveVehicleKm = async (vid) => {
+  const km = parseInt(document.getElementById('edit-km-inp')?.value || '0');
+  if (!km || km < 1) { flash('Vul een geldige km-stand in', 'error'); return; }
+  const v = S.vehicles.find(x => x.id === vid);
+  if (!v) return;
+  setVehicleKm(vid, km, v.last_addr || '');
+  v.last_km = km;
+  // Update ook de laatste rit in Firebase
+  const vTrips = S.trips.filter(t => t.vehicle_id === vid && t.odometer_end)
+    .sort((a,b) => (b.trip_date||'').localeCompare(a.trip_date||''));
+  if (vTrips.length > 0) {
+    try {
+      const lastTrip = vTrips[0];
+      const newTotal = km - (lastTrip.odometer_start || 0);
+      const token = await S.user.getIdToken();
+      await fetch(`https://firestore.googleapis.com/v1/projects/qline-ritten/databases/(default)/documents/trips/${lastTrip.id}?updateMask.fieldPaths=odometer_end&updateMask.fieldPaths=km_total`, {
+        method: 'PATCH',
+        headers: {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
+        body: JSON.stringify({fields: {odometer_end: {integerValue: String(km)}, km_total: {integerValue: String(newTotal > 0 ? newTotal : lastTrip.km_total)}}})
+      });
+      S.trips = S.trips.map(t => t.id === lastTrip.id ? {...t, odometer_end: km, km_total: newTotal > 0 ? newTotal : t.km_total} : t);
+    } catch(e) { console.log('update error:', e); }
+  }
+  S._editKmVid = null;
+  flash('Kilometerstand bijgewerkt naar ' + km + ' km ✓');
 };
 
 window.deleteTrip = async (id) => {
