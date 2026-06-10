@@ -1408,23 +1408,32 @@ window.mSetType = (type) => {
 };
 
 window.saveManualTrip = async () => {
-  const vidVal = document.getElementById('m-vid')?.value;
-  const uidVal = document.getElementById('m-uid')?.value;
-  const date   = document.getElementById('m-date')?.value;
-  const dep    = document.getElementById('m-dep')?.value;
-  const arr    = document.getElementById('m-arr')?.value;
-  const from   = document.getElementById('m-from')?.value?.trim();
-  const to     = document.getElementById('m-to')?.value?.trim();
-  const kmS    = parseInt(document.getElementById('m-km-start')?.value||'0');
-  const kmE    = parseInt(document.getElementById('m-km-end')?.value||'0');
-  const purpose= document.getElementById('m-purpose')?.value?.trim();
-  const notes  = document.getElementById('m-notes')?.value?.trim();
+  const vidVal  = document.getElementById('m-vid')?.value;
+  const uidVal  = document.getElementById('m-uid')?.value;
+  const date    = document.getElementById('m-date')?.value;
+  const dep     = document.getElementById('m-dep')?.value;
+  const arr     = document.getElementById('m-arr')?.value;
+  const from    = document.getElementById('m-from')?.value?.trim();
+  const to      = document.getElementById('m-to')?.value?.trim();
+  const kmS     = parseInt(document.getElementById('m-km-start')?.value||'0');
+  const kmE     = parseInt(document.getElementById('m-km-end')?.value||'0');
+  const purpose = document.getElementById('m-purpose')?.value?.trim();
+  const notes   = document.getElementById('m-notes')?.value?.trim();
 
-  if (!vidVal||!date||!from||!to||!kmS||!kmE||!purpose) { flash('Vul alle verplichte velden in','error'); return; }
-  if (kmE <= kmS) { flash('Eindstand moet hoger zijn dan beginstand','error'); return; }
+  if (!vidVal)   { flash('Kies een voertuig','error'); return; }
+  if (!uidVal)   { flash('Kies een rijder','error'); return; }
+  if (!date)     { flash('Vul een datum in','error'); return; }
+  if (!from)     { flash('Vul een vertrekadres in','error'); return; }
+  if (!to)       { flash('Vul een aankomstadres in','error'); return; }
+  if (!kmS)      { flash('Vul de beginstand in','error'); return; }
+  if (!kmE)      { flash('Vul de eindstand in','error'); return; }
+  if (kmE <= kmS){ flash('Eindstand moet hoger zijn dan beginstand','error'); return; }
+  if (!purpose)  { flash('Vul het doel in','error'); return; }
 
-  const [uid, uname] = uidVal.split('|');
-  const v = S.vehicles.find(x => x.id === vidVal);
+  const parts = uidVal.split('|');
+  const uid   = parts[0];
+  const uname = parts.slice(1).join('|');
+  const v     = S.vehicles.find(x => x.id === vidVal);
 
   try {
     await addDoc(collection(db,'trips'), {
@@ -1447,14 +1456,13 @@ window.saveManualTrip = async () => {
       status: 'open',
       created_at: serverTimestamp()
     });
-    // Update vehicle km in localStorage
     setVehicleKm(vidVal, kmE, to);
     if (v) { v.last_km = kmE; v.last_addr = to; }
     await loadTrips();
     flash('Rit opgeslagen ✓ — ' + (kmE-kmS) + ' km');
     S.adminTab = 'approve';
     render();
-  } catch(e) { flash('Fout: '+e.message,'error'); }
+  } catch(e) { flash('Fout bij opslaan: ' + e.message, 'error'); }
 };
 
 function renderAdminActive() {
@@ -1629,6 +1637,13 @@ window.setAdminTab = async (t) => {
   if (t === 'users' || t === 'manual') await loadUsers();
   if (t === 'active') await loadAR();
   render();
+};
+
+// Admin pagina: laad users meteen
+const _origGo = go;
+window.go = (page, extra={}) => {
+  if (page === 'admin' && !S.users?.length) loadUsers().then(() => render());
+  _origGo(page, extra);
 };
 
 window.approve = async (id, status) => {
