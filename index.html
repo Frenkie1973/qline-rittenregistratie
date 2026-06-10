@@ -1329,71 +1329,74 @@ ${S.adminTab==='vehicles'?renderAdminVehicles():S.adminTab==='users'?renderAdmin
 }
 
 function renderAdminManual() {
-  const vopts = S.vehicles.map(v => `<option value="${v.id}">${esc(v.license)} · ${esc(v.brand||'')}</option>`).join('');
-  const uopts = S.users.map(u => `<option value="${u.id}|${esc(u.full_name||u.email)}">${esc(u.full_name||u.email)}</option>`).join('');
-  const today = nowDate();
+  if (!S._mForm) S._mForm = {
+    vid: S.vehicles[0]?.id||'', uid:'', date: nowDate(),
+    dep:'08:00', arr:'09:00', from:'Haarbrinksweg 47, Geesteren',
+    to:'', kmS:'', kmE:'', purpose:'', notes:'', type:'Zakelijk'
+  };
+  const f = S._mForm;
+  const vopts = S.vehicles.map(v => `<option value="${v.id}" ${f.vid===v.id?'selected':''}>${esc(v.license)} · ${esc(v.brand||'')}</option>`).join('');
+  const uopts = S.users.map(u => { const val=u.id+'|'+(u.full_name||u.email); return `<option value="${esc(val)}" ${f.uid===val?'selected':''}>${esc(u.full_name||u.email)}</option>`; }).join('');
   return `
 <div class="card">
   <div class="ch">Rit handmatig invoeren</div>
   <div class="cb">
     <div class="fg">
       <label>Voertuig *</label>
-      <select id="m-vid" style="font-size:15px">${vopts}</select>
+      <select id="m-vid" style="font-size:15px" onchange="S._mForm.vid=this.value">${vopts}</select>
     </div>
     <div class="fg">
       <label>Rijder *</label>
-      <select id="m-uid" style="font-size:15px">${uopts}</select>
+      <select id="m-uid" style="font-size:15px" onchange="S._mForm.uid=this.value">${uopts}</select>
     </div>
     <div class="fg">
       <label>Datum *</label>
-      <input type="date" id="m-date" value="${today}" style="font-size:15px"/>
+      <input type="date" id="m-date" value="${f.date}" style="font-size:15px" onchange="S._mForm.date=this.value"/>
     </div>
     <div class="row2">
       <div class="fg">
         <label>Vertrektijd</label>
-        <input type="time" id="m-dep" value="08:00" style="font-size:15px"/>
+        <input type="time" id="m-dep" value="${f.dep}" style="font-size:15px" onchange="S._mForm.dep=this.value"/>
       </div>
       <div class="fg">
         <label>Aankomsttijd</label>
-        <input type="time" id="m-arr" value="09:00" style="font-size:15px"/>
+        <input type="time" id="m-arr" value="${f.arr}" style="font-size:15px" onchange="S._mForm.arr=this.value"/>
       </div>
     </div>
     <div class="fg">
       <label>Vertrekadres *</label>
-      <input type="text" id="m-from" value="Haarbrinksweg 47, Geesteren" style="font-size:15px"/>
+      <input type="text" id="m-from" value="${esc(f.from)}" style="font-size:15px" oninput="S._mForm.from=this.value"/>
     </div>
     <div class="fg">
       <label>Aankomstadres *</label>
-      <input type="text" id="m-to" style="font-size:15px" placeholder="bijv. Westerhaar"/>
+      <input type="text" id="m-to" value="${esc(f.to)}" style="font-size:15px" placeholder="bijv. Westerhaar" oninput="S._mForm.to=this.value"/>
     </div>
     <div class="row2">
       <div class="fg">
         <label>Beginstand km *</label>
-        <input type="number" id="m-km-start" style="font-size:18px;font-weight:700;text-align:center" placeholder="bijv. 45793" inputmode="numeric"/>
+        <input type="number" id="m-km-start" value="${f.kmS}" style="font-size:18px;font-weight:700;text-align:center" placeholder="bijv. 45793" inputmode="numeric" oninput="S._mForm.kmS=this.value"/>
       </div>
       <div class="fg">
         <label>Eindstand km *</label>
-        <input type="number" id="m-km-end" style="font-size:18px;font-weight:700;text-align:center" placeholder="bijv. 45845" inputmode="numeric"/>
+        <input type="number" id="m-km-end" value="${f.kmE}" style="font-size:18px;font-weight:700;text-align:center" placeholder="bijv. 45845" inputmode="numeric" oninput="S._mForm.kmE=this.value"/>
       </div>
     </div>
     <div class="fg">
       <label>Doel / klant *</label>
-      <input type="text" id="m-purpose" style="font-size:15px" placeholder="bijv. Westerhaar heen en terug"/>
+      <input type="text" id="m-purpose" value="${esc(f.purpose)}" style="font-size:15px" placeholder="bijv. Westerhaar heen en terug" oninput="S._mForm.purpose=this.value"/>
     </div>
     <div class="fg">
       <label>Type rit</label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <button id="m-btn-zak" onclick="mSetType('Zakelijk')" class="btn" style="padding:12px;background:var(--red);color:#fff;border-radius:8px">💼 Zakelijk</button>
-        <button id="m-btn-pri" onclick="mSetType('Privé')" class="btn" style="padding:12px;background:#f0f0f0;color:#555;border-radius:8px">🏠 Privé</button>
+        <button onclick="S._mForm.type='Zakelijk';render()" class="btn" style="padding:12px;background:${f.type==='Zakelijk'?'var(--red)':'#f0f0f0'};color:${f.type==='Zakelijk'?'#fff':'#555'};border-radius:8px">💼 Zakelijk</button>
+        <button onclick="S._mForm.type='Privé';render()" class="btn" style="padding:12px;background:${f.type==='Privé'?'#4a1a6e':'#f0f0f0'};color:${f.type==='Privé'?'#fff':'#555'};border-radius:8px">🏠 Privé</button>
       </div>
     </div>
     <div class="fg">
       <label>Opmerkingen</label>
-      <input type="text" id="m-notes" style="font-size:15px" placeholder="optioneel"/>
+      <input type="text" id="m-notes" value="${esc(f.notes)}" style="font-size:15px" placeholder="optioneel" oninput="S._mForm.notes=this.value"/>
     </div>
-    <button class="btn bp bw" style="font-size:17px;padding:16px" onclick="saveManualTrip()">
-      ➕ Rit opslaan
-    </button>
+    <button class="btn bp bw" style="font-size:17px;padding:16px" onclick="saveManualTrip()">➕ Rit opslaan</button>
   </div>
 </div>`;
 }
@@ -1408,56 +1411,64 @@ window.mSetType = (type) => {
 };
 
 window.saveManualTrip = async () => {
-  const vidVal  = document.getElementById('m-vid')?.value;
-  const uidVal  = document.getElementById('m-uid')?.value;
-  const date    = document.getElementById('m-date')?.value;
-  const dep     = document.getElementById('m-dep')?.value;
-  const arr     = document.getElementById('m-arr')?.value;
-  const from    = document.getElementById('m-from')?.value?.trim();
-  const to      = document.getElementById('m-to')?.value?.trim();
-  const kmS     = parseInt(document.getElementById('m-km-start')?.value||'0');
-  const kmE     = parseInt(document.getElementById('m-km-end')?.value||'0');
-  const purpose = document.getElementById('m-purpose')?.value?.trim();
-  const notes   = document.getElementById('m-notes')?.value?.trim();
+  const f = S._mForm;
+  if (!f) { flash('Formulier niet geladen','error'); return; }
 
-  if (!vidVal)   { flash('Kies een voertuig','error'); return; }
-  if (!uidVal)   { flash('Kies een rijder','error'); return; }
-  if (!date)     { flash('Vul een datum in','error'); return; }
-  if (!from)     { flash('Vul een vertrekadres in','error'); return; }
-  if (!to)       { flash('Vul een aankomstadres in','error'); return; }
-  if (!kmS)      { flash('Vul de beginstand in','error'); return; }
-  if (!kmE)      { flash('Vul de eindstand in','error'); return; }
-  if (kmE <= kmS){ flash('Eindstand moet hoger zijn dan beginstand','error'); return; }
-  if (!purpose)  { flash('Vul het doel in','error'); return; }
+  // Lees ook direct uit DOM voor zekerheid (iOS fix)
+  f.vid     = document.getElementById('m-vid')?.value || f.vid;
+  f.uid     = document.getElementById('m-uid')?.value || f.uid;
+  f.date    = document.getElementById('m-date')?.value || f.date;
+  f.dep     = document.getElementById('m-dep')?.value || f.dep;
+  f.arr     = document.getElementById('m-arr')?.value || f.arr;
+  f.from    = document.getElementById('m-from')?.value?.trim() || f.from;
+  f.to      = document.getElementById('m-to')?.value?.trim() || f.to;
+  f.kmS     = document.getElementById('m-km-start')?.value || f.kmS;
+  f.kmE     = document.getElementById('m-km-end')?.value || f.kmE;
+  f.purpose = document.getElementById('m-purpose')?.value?.trim() || f.purpose;
+  f.notes   = document.getElementById('m-notes')?.value?.trim() || f.notes;
 
-  const parts = uidVal.split('|');
+  const kmS = parseInt(f.kmS||'0');
+  const kmE = parseInt(f.kmE||'0');
+
+  if (!f.vid)     { flash('Kies een voertuig','error'); return; }
+  if (!f.uid)     { flash('Kies een rijder','error'); return; }
+  if (!f.date)    { flash('Vul een datum in','error'); return; }
+  if (!f.from)    { flash('Vul een vertrekadres in','error'); return; }
+  if (!f.to)      { flash('Vul een aankomstadres in','error'); return; }
+  if (!kmS)       { flash('Vul de beginstand in','error'); return; }
+  if (!kmE)       { flash('Vul de eindstand in','error'); return; }
+  if (kmE <= kmS) { flash('Eindstand moet hoger zijn dan beginstand','error'); return; }
+  if (!f.purpose) { flash('Vul het doel in','error'); return; }
+
+  const parts = f.uid.split('|');
   const uid   = parts[0];
   const uname = parts.slice(1).join('|');
-  const v     = S.vehicles.find(x => x.id === vidVal);
+  const v     = S.vehicles.find(x => x.id === f.vid);
 
   try {
     await addDoc(collection(db,'trips'), {
-      vehicle_id: vidVal,
+      vehicle_id: f.vid,
       vehicle_license: v?.license||'',
       user_id: uid,
       user_name: uname,
-      trip_date: date,
-      departure_time: dep||'',
-      arrival_time: arr||'',
+      trip_date: f.date,
+      departure_time: f.dep||'',
+      arrival_time: f.arr||'',
       odometer_start: kmS,
       odometer_end: kmE,
       km_total: kmE - kmS,
-      departure_address: from,
-      arrival_address: to,
-      purpose,
-      trip_type: _mTripType,
-      notes: notes||'',
+      departure_address: f.from,
+      arrival_address: f.to,
+      purpose: f.purpose,
+      trip_type: f.type||'Zakelijk',
+      notes: f.notes||'',
       detour: false, detour_reason: '', private_km: 0,
       status: 'open',
       created_at: serverTimestamp()
     });
-    setVehicleKm(vidVal, kmE, to);
-    if (v) { v.last_km = kmE; v.last_addr = to; }
+    setVehicleKm(f.vid, kmE, f.to);
+    if (v) { v.last_km = kmE; v.last_addr = f.to; }
+    S._mForm = null; // reset formulier
     await loadTrips();
     flash('Rit opgeslagen ✓ — ' + (kmE-kmS) + ' km');
     S.adminTab = 'approve';
