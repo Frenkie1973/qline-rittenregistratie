@@ -1322,10 +1322,140 @@ function renderAdmin() {
   <button class="tb ${S.adminTab==='vehicles'?'on':''}" onclick="setAdminTab('vehicles')">🚗 Voertuigen</button>
   <button class="tb ${S.adminTab==='users'?'on':''}" onclick="setAdminTab('users')">👥 Gebruikers</button>
   <button class="tb ${S.adminTab==='active'?'on':''}" onclick="setAdminTab('active')" style="${actCnt>0?'color:var(--red);font-weight:700':''}">⚠️ Actief (${actCnt})</button>
+  <button class="tb ${S.adminTab==='manual'?'on':''}" onclick="setAdminTab('manual')">➕ Handmatig</button>
   <button class="tb ${S.adminTab==='approve'?'on':''}" onclick="setAdminTab('approve')">✅ Goed (${S.trips.filter(t=>t.status==='open').length})</button>
 </div>
-${S.adminTab==='vehicles'?renderAdminVehicles():S.adminTab==='users'?renderAdminUsers():S.adminTab==='active'?renderAdminActive():renderAdminApprove()}`;
+${S.adminTab==='vehicles'?renderAdminVehicles():S.adminTab==='users'?renderAdminUsers():S.adminTab==='active'?renderAdminActive():S.adminTab==='manual'?renderAdminManual():renderAdminApprove()}`;
 }
+
+function renderAdminManual() {
+  const vopts = S.vehicles.map(v => `<option value="${v.id}">${esc(v.license)} · ${esc(v.brand||'')}</option>`).join('');
+  const uopts = S.users.map(u => `<option value="${u.id}|${esc(u.full_name||u.email)}">${esc(u.full_name||u.email)}</option>`).join('');
+  const today = nowDate();
+  return `
+<div class="card">
+  <div class="ch">Rit handmatig invoeren</div>
+  <div class="cb">
+    <div class="fg">
+      <label>Voertuig *</label>
+      <select id="m-vid" style="font-size:15px">${vopts}</select>
+    </div>
+    <div class="fg">
+      <label>Rijder *</label>
+      <select id="m-uid" style="font-size:15px">${uopts}</select>
+    </div>
+    <div class="fg">
+      <label>Datum *</label>
+      <input type="date" id="m-date" value="${today}" style="font-size:15px"/>
+    </div>
+    <div class="row2">
+      <div class="fg">
+        <label>Vertrektijd</label>
+        <input type="time" id="m-dep" value="08:00" style="font-size:15px"/>
+      </div>
+      <div class="fg">
+        <label>Aankomsttijd</label>
+        <input type="time" id="m-arr" value="09:00" style="font-size:15px"/>
+      </div>
+    </div>
+    <div class="fg">
+      <label>Vertrekadres *</label>
+      <input type="text" id="m-from" value="Haarbrinksweg 47, Geesteren" style="font-size:15px"/>
+    </div>
+    <div class="fg">
+      <label>Aankomstadres *</label>
+      <input type="text" id="m-to" style="font-size:15px" placeholder="bijv. Westerhaar"/>
+    </div>
+    <div class="row2">
+      <div class="fg">
+        <label>Beginstand km *</label>
+        <input type="number" id="m-km-start" style="font-size:18px;font-weight:700;text-align:center" placeholder="bijv. 45793" inputmode="numeric"/>
+      </div>
+      <div class="fg">
+        <label>Eindstand km *</label>
+        <input type="number" id="m-km-end" style="font-size:18px;font-weight:700;text-align:center" placeholder="bijv. 45845" inputmode="numeric"/>
+      </div>
+    </div>
+    <div class="fg">
+      <label>Doel / klant *</label>
+      <input type="text" id="m-purpose" style="font-size:15px" placeholder="bijv. Westerhaar heen en terug"/>
+    </div>
+    <div class="fg">
+      <label>Type rit</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <button id="m-btn-zak" onclick="mSetType('Zakelijk')" class="btn" style="padding:12px;background:var(--red);color:#fff;border-radius:8px">💼 Zakelijk</button>
+        <button id="m-btn-pri" onclick="mSetType('Privé')" class="btn" style="padding:12px;background:#f0f0f0;color:#555;border-radius:8px">🏠 Privé</button>
+      </div>
+    </div>
+    <div class="fg">
+      <label>Opmerkingen</label>
+      <input type="text" id="m-notes" style="font-size:15px" placeholder="optioneel"/>
+    </div>
+    <button class="btn bp bw" style="font-size:17px;padding:16px" onclick="saveManualTrip()">
+      ➕ Rit opslaan
+    </button>
+  </div>
+</div>`;
+}
+
+let _mTripType = 'Zakelijk';
+window.mSetType = (type) => {
+  _mTripType = type;
+  const bz = document.getElementById('m-btn-zak');
+  const bp = document.getElementById('m-btn-pri');
+  if (bz) { bz.style.background = type==='Zakelijk'?'var(--red)':'#f0f0f0'; bz.style.color = type==='Zakelijk'?'#fff':'#555'; }
+  if (bp) { bp.style.background = type==='Privé'?'#4a1a6e':'#f0f0f0'; bp.style.color = type==='Privé'?'#fff':'#555'; }
+};
+
+window.saveManualTrip = async () => {
+  const vidVal = document.getElementById('m-vid')?.value;
+  const uidVal = document.getElementById('m-uid')?.value;
+  const date   = document.getElementById('m-date')?.value;
+  const dep    = document.getElementById('m-dep')?.value;
+  const arr    = document.getElementById('m-arr')?.value;
+  const from   = document.getElementById('m-from')?.value?.trim();
+  const to     = document.getElementById('m-to')?.value?.trim();
+  const kmS    = parseInt(document.getElementById('m-km-start')?.value||'0');
+  const kmE    = parseInt(document.getElementById('m-km-end')?.value||'0');
+  const purpose= document.getElementById('m-purpose')?.value?.trim();
+  const notes  = document.getElementById('m-notes')?.value?.trim();
+
+  if (!vidVal||!date||!from||!to||!kmS||!kmE||!purpose) { flash('Vul alle verplichte velden in','error'); return; }
+  if (kmE <= kmS) { flash('Eindstand moet hoger zijn dan beginstand','error'); return; }
+
+  const [uid, uname] = uidVal.split('|');
+  const v = S.vehicles.find(x => x.id === vidVal);
+
+  try {
+    await addDoc(collection(db,'trips'), {
+      vehicle_id: vidVal,
+      vehicle_license: v?.license||'',
+      user_id: uid,
+      user_name: uname,
+      trip_date: date,
+      departure_time: dep||'',
+      arrival_time: arr||'',
+      odometer_start: kmS,
+      odometer_end: kmE,
+      km_total: kmE - kmS,
+      departure_address: from,
+      arrival_address: to,
+      purpose,
+      trip_type: _mTripType,
+      notes: notes||'',
+      detour: false, detour_reason: '', private_km: 0,
+      status: 'open',
+      created_at: serverTimestamp()
+    });
+    // Update vehicle km in localStorage
+    setVehicleKm(vidVal, kmE, to);
+    if (v) { v.last_km = kmE; v.last_addr = to; }
+    await loadTrips();
+    flash('Rit opgeslagen ✓ — ' + (kmE-kmS) + ' km');
+    S.adminTab = 'approve';
+    render();
+  } catch(e) { flash('Fout: '+e.message,'error'); }
+};
 
 function renderAdminActive() {
   const actief = Object.entries(S.activeRides);
@@ -1496,7 +1626,7 @@ window.setFF = (k,v) => { S.ff[k]=v; render(); };
 window.resetFF = () => { S.ff={from:'',to:'',type:'',status:'',search:''}; render(); };
 window.setAdminTab = async (t) => {
   S.adminTab = t;
-  if (t === 'users') await loadUsers();
+  if (t === 'users' || t === 'manual') await loadUsers();
   if (t === 'active') await loadAR();
   render();
 };
