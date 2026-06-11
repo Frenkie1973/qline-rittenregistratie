@@ -222,6 +222,12 @@ async function saveAR_start(vid, ride) {
   const ref = await addDoc(collection(db,'active_rides'), ride);
   ride._docId = ref.id;
   S.activeRides[vid] = ride;
+  // Altijd ook opslaan in localStorage als backup
+  try {
+    const ar = JSON.parse(localStorage.getItem('qline_ar')||'{}');
+    ar[vid] = ride;
+    localStorage.setItem('qline_ar', JSON.stringify(ar));
+  } catch(e) {}
 }
 
 async function saveAR_stop(vid) {
@@ -232,6 +238,12 @@ async function saveAR_stop(vid) {
     for (const d of snap.docs) await deleteDoc(doc(db,'active_rides', d.id));
   } catch(e) { console.log('saveAR_stop error:', e); }
   delete S.activeRides[vid];
+  // Ook uit localStorage verwijderen
+  try {
+    const ar = JSON.parse(localStorage.getItem('qline_ar')||'{}');
+    delete ar[vid];
+    localStorage.setItem('qline_ar', JSON.stringify(ar));
+  } catch(e) {}
 }
 
 // ── localStorage helpers ──────────────────────────────────────────────────────
