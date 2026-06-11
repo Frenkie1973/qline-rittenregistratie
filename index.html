@@ -489,7 +489,7 @@ ${(() => {
 // ══════════════════════════════════════════════════════════════════
 window.goWizRijden = () => {
   const lastVid = getLastVehicle();
-  S.wiz = { step:1, vid: lastVid, km:'', addr:'', purpose:'', tripType:'Zakelijk', avid:'', endKm:'', endAddr:'' };
+  S.wiz = { step:1, vid: lastVid, km:'', addr:'', purpose:'', tripType:'Zakelijk', avid:'', endKm:'', endAddr:'', _kmCorrect: false };
   // Pre-fill km en addr van vorig voertuig
   if (lastVid) {
     const v = S.vehicles.find(x => x.id === lastVid);
@@ -925,6 +925,7 @@ window.speechEndKm = () => {
 };
 window.wizSelectVehicle = (vid) => {
   S.wiz.vid = vid;
+  S.wiz._kmCorrect = false;
   const v = S.vehicles.find(x => x.id === vid);
   const lsKm = getVehicleKm(vid);
   S.wiz.km = String(v?.last_km || lsKm?.km || '');
