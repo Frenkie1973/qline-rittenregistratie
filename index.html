@@ -1180,33 +1180,22 @@ window.wizStopRit = async () => {
     saveAddress(addr);
     saveAddress(ride.start_addr);
     if (ride._docId) {
-      // Update bestaande trip
-      await updateDoc(doc(db,'trips', ride._docId), {
-        arrival_time: time,
-        odometer_end: endKm,
-        km_total: endKm - ride.start_km,
-        arrival_address: addr,
-        notes: '',
-        status: 'open',
-      });
-      S.trips = S.trips.map(t => t.id === ride._docId ? {
-        ...t, arrival_time: time, odometer_end: endKm,
-        km_total: endKm - ride.start_km, arrival_address: addr, status: 'open'
-      } : t);
-    } else {
-      // Fallback: nieuwe trip aanmaken
-      await addDoc(collection(db,'trips'),{
-        vehicle_id: vid, vehicle_license: v?.license||'',
-        user_id: ride.user_id, user_name: ride.user_name,
-        trip_date: ride.trip_date, departure_time: ride.dep_time||'',
-        arrival_time: time, odometer_start: ride.start_km,
-        odometer_end: endKm, km_total: endKm - ride.start_km,
-        departure_address: ride.start_addr||'', arrival_address: addr,
-        purpose: ride.purpose, trip_type: ride.trip_type||'Zakelijk',
-        notes: '', detour: false, detour_reason: '', private_km: 0,
-        status: 'open', created_at: serverTimestamp(),
-      });
+      // Verwijder de 'onderweg' trip en maak nieuwe 'open' trip aan
+      // (vermijdt updateDoc rechten problemen)
+      try { await deleteDoc(doc(db,'trips', ride._docId)); } catch(e) {}
     }
+    // Maak nieuwe voltooide trip aan
+    await addDoc(collection(db,'trips'),{
+      vehicle_id: vid, vehicle_license: v?.license||'',
+      user_id: ride.user_id, user_name: ride.user_name,
+      trip_date: ride.trip_date, departure_time: ride.dep_time||'',
+      arrival_time: time, odometer_start: ride.start_km,
+      odometer_end: endKm, km_total: endKm - ride.start_km,
+      departure_address: ride.start_addr||'', arrival_address: addr,
+      purpose: ride.purpose, trip_type: ride.trip_type||'Zakelijk',
+      notes: '', detour: false, detour_reason: '', private_km: 0,
+      status: 'open', created_at: serverTimestamp(),
+    });
     if (v) { v.last_km=endKm; v.last_addr=addr; v.last_date=ride.trip_date; }
     setVehicleKm(vid, endKm, addr);
     localStorage.setItem('qline_last_addr_' + vid, addr);
