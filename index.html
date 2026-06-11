@@ -291,7 +291,7 @@ onAuthStateChanged(auth, async u => {
       } else { S.profile = snap.data(); }
       await loadVehicles();
       await loadTrips();
-      loadAR();
+      await loadAR();
       loadVehicleStatus();
     } catch(e) { console.error(e); }
   }
