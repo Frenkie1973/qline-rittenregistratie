@@ -186,32 +186,35 @@ function go(page, extra={}) {
 
 // ── Firebase active rides ─────────────────────────────────────────────────────
 async function loadAR() {
+  // Laad actieve ritten uit trips collectie (status = 'onderweg')
+  // Iedereen heeft leesrechten op trips want die worden sowieso al geladen
+  S.activeRides = {};
   try {
-    const snap = await getDocs(collection(db,'active_rides'));
-    S.activeRides = {};
-    snap.docs.forEach(d => { S.activeRides[d.data().vehicle_id] = {...d.data(), _docId: d.id}; });
+    // Gebruik al geladen trips als die er zijn
+    const onderweg = S.trips.filter(t => t.status === 'onderweg');
+    onderweg.forEach(t => {
+      S.activeRides[t.vehicle_id] = {
+        vehicle_id: t.vehicle_id,
+        user_id: t.user_id,
+        user_name: t.user_name,
+        trip_date: t.trip_date,
+        dep_time: t.departure_time,
+        start_km: t.odometer_start,
+        start_addr: t.departure_address,
+        purpose: t.purpose,
+        trip_type: t.trip_type,
+        _docId: t.id
+      };
+    });
+    // Migreer eventuele oude active_rides uit localStorage
     const oldAR = JSON.parse(localStorage.getItem('qline_ar')||'{}');
-    for (const [vid, ride] of Object.entries(oldAR)) {
-      if (!S.activeRides[vid] && ride.start_km) {
-        const ref = await addDoc(collection(db,'active_rides'), {...ride, migrated: true, created_at: serverTimestamp()});
-        S.activeRides[vid] = {...ride, _docId: ref.id};
-      }
-    }
     if (Object.keys(oldAR).length > 0) localStorage.removeItem('qline_ar');
   } catch(e) {
-    // Fallback: lees eigen actieve rit uit localStorage
-    try {
+    // Fallback localStorage
+    try { 
       const local = JSON.parse(localStorage.getItem('qline_ar')||'{}');
-      if (Object.keys(local).length > 0) {
-        S.activeRides = local;
-      } else {
-        // Probeer alleen eigen ritten op te halen
-        try {
-          const snap2 = await getDocs(query(collection(db,'active_rides'), where('user_id','==',S.user.uid)));
-          snap2.docs.forEach(d => { S.activeRides[d.data().vehicle_id] = {...d.data(), _docId: d.id}; });
-        } catch(e2) { S.activeRides = {}; }
-      }
-    } catch(e2) { S.activeRides = {}; }
+      if (Object.keys(local).length > 0) S.activeRides = local;
+    } catch(e2) {}
   }
   const saved = JSON.parse(localStorage.getItem('qline_addr')||'[]');
   const qline = 'Haarbrinksweg 47, Geesteren';
@@ -219,10 +222,22 @@ async function loadAR() {
 }
 
 async function saveAR_start(vid, ride) {
-  const ref = await addDoc(collection(db,'active_rides'), ride);
+  const v = S.vehicles.find(x => x.id === vid);
+  const tripData = {
+    vehicle_id: vid, vehicle_license: v?.license||'',
+    user_id: ride.user_id, user_name: ride.user_name,
+    trip_date: ride.trip_date, departure_time: ride.dep_time||'',
+    arrival_time: '', odometer_start: ride.start_km,
+    odometer_end: 0, km_total: 0,
+    departure_address: ride.start_addr||'', arrival_address: '',
+    purpose: ride.purpose||'', trip_type: ride.trip_type||'Zakelijk',
+    notes: '', detour: false, detour_reason: '', private_km: 0,
+    status: 'onderweg', created_at: serverTimestamp()
+  };
+  const ref = await addDoc(collection(db,'trips'), tripData);
   ride._docId = ref.id;
   S.activeRides[vid] = ride;
-  // Altijd ook opslaan in localStorage als backup
+  S.trips.unshift({id: ref.id, ...tripData});
   try {
     const ar = JSON.parse(localStorage.getItem('qline_ar')||'{}');
     ar[vid] = ride;
@@ -231,14 +246,8 @@ async function saveAR_start(vid, ride) {
 }
 
 async function saveAR_stop(vid) {
-  try {
-    const ride = S.activeRides[vid];
-    if (ride?._docId) await deleteDoc(doc(db,'active_rides', ride._docId));
-    const snap = await getDocs(query(collection(db,'active_rides'), where('vehicle_id','==',vid)));
-    for (const d of snap.docs) await deleteDoc(doc(db,'active_rides', d.id));
-  } catch(e) { console.log('saveAR_stop error:', e); }
+  // Niets te doen - trip wordt al bijgewerkt in wizStopRit via updateDoc
   delete S.activeRides[vid];
-  // Ook uit localStorage verwijderen
   try {
     const ar = JSON.parse(localStorage.getItem('qline_ar')||'{}');
     delete ar[vid];
@@ -1169,26 +1178,34 @@ window.wizStopRit = async () => {
   try {
     saveAddress(addr);
     saveAddress(ride.start_addr);
-    await addDoc(collection(db,'trips'),{
-      vehicle_id: vid,
-      vehicle_license: v?.license||'',
-      user_id: ride.user_id,
-      user_name: ride.user_name,
-      trip_date: ride.trip_date,
-      departure_time: ride.dep_time,
-      arrival_time: time,
-      odometer_start: ride.start_km,
-      odometer_end: endKm,
-      km_total: endKm - ride.start_km,
-      departure_address: ride.start_addr||'',
-      arrival_address: addr,
-      purpose: ride.purpose,
-      trip_type: ride.trip_type||'Zakelijk',
-      notes: '',
-      detour: false, detour_reason: '', private_km: 0,
-      status: 'open',
-      created_at: serverTimestamp(),
-    });
+    if (ride._docId) {
+      // Update bestaande trip
+      await updateDoc(doc(db,'trips', ride._docId), {
+        arrival_time: time,
+        odometer_end: endKm,
+        km_total: endKm - ride.start_km,
+        arrival_address: addr,
+        notes: '',
+        status: 'open',
+      });
+      S.trips = S.trips.map(t => t.id === ride._docId ? {
+        ...t, arrival_time: time, odometer_end: endKm,
+        km_total: endKm - ride.start_km, arrival_address: addr, status: 'open'
+      } : t);
+    } else {
+      // Fallback: nieuwe trip aanmaken
+      await addDoc(collection(db,'trips'),{
+        vehicle_id: vid, vehicle_license: v?.license||'',
+        user_id: ride.user_id, user_name: ride.user_name,
+        trip_date: ride.trip_date, departure_time: ride.dep_time||'',
+        arrival_time: time, odometer_start: ride.start_km,
+        odometer_end: endKm, km_total: endKm - ride.start_km,
+        departure_address: ride.start_addr||'', arrival_address: addr,
+        purpose: ride.purpose, trip_type: ride.trip_type||'Zakelijk',
+        notes: '', detour: false, detour_reason: '', private_km: 0,
+        status: 'open', created_at: serverTimestamp(),
+      });
+    }
     if (v) { v.last_km=endKm; v.last_addr=addr; v.last_date=ride.trip_date; }
     setVehicleKm(vid, endKm, addr);
     localStorage.setItem('qline_last_addr_' + vid, addr);
@@ -1209,14 +1226,15 @@ window.annuleerRit = async (vid) => {
   if (!vid) { flash('Geen actieve rit gevonden','error'); return; }
   const ride = S.activeRides[vid];
   if (ride?._docId) {
-    try { await deleteDoc(doc(db,'active_rides',ride._docId)); } catch(e) {}
-  } else {
-    try {
-      const snap = await getDocs(query(collection(db,'active_rides'),where('vehicle_id','==',vid)));
-      for (const d of snap.docs) await deleteDoc(doc(db,'active_rides',d.id));
-    } catch(e) {}
+    try { await deleteDoc(doc(db,'trips', ride._docId)); } catch(e) {}
+    S.trips = S.trips.filter(t => t.id !== ride._docId);
   }
   delete S.activeRides[vid];
+  try {
+    const ar = JSON.parse(localStorage.getItem('qline_ar')||'{}');
+    delete ar[vid];
+    localStorage.setItem('qline_ar', JSON.stringify(ar));
+  } catch(e) {}
   flash('Rit geannuleerd');
   go('dash');
 };
