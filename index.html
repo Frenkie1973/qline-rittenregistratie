@@ -171,7 +171,10 @@ const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 function flash(msg, type='success') {
   S.msg = msg; S.msgType = type;
   render();
-  setTimeout(() => { S.msg = null; render(); }, 3500);
+  // Fouten blijven staan totdat de gebruiker ze wegklikt
+  if (type !== 'error') {
+    setTimeout(() => { S.msg = null; render(); }, 3500);
+  }
 }
 
 function go(page, extra={}) {
@@ -314,7 +317,10 @@ function renderShell() {
     <button onclick="doSignOut()" style="background:none;border:none;color:#888;cursor:pointer;font-size:12px">Uit</button>
   </div>
 </header>
-<main>${S.msg?`<div class="alert a${S.msgType[0]}">${S.msg}</div>`:''}${renderPage()}</main>
+<main>${S.msg?`<div class="alert a${S.msgType[0]}" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+  <span>${S.msg}</span>
+  ${S.msgType==='error'?`<button onclick="S.msg=null;render()" style="background:none;border:none;font-size:18px;cursor:pointer;flex-shrink:0;color:inherit">✕</button>`:''}
+</div>`:''}${renderPage()}</main>
 <nav class="nav">
   <button class="nb ${S.page==='dash'?'on':''}" onclick="go('dash')"><span class="ni">📊</span>Dashboard</button>
   <button class="nb ${S.page==='rijden'?'on':''}" onclick="goWizRijden()"><span class="ni">🚗</span>Ga rijden</button>
