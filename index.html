@@ -199,7 +199,19 @@ async function loadAR() {
     }
     if (Object.keys(oldAR).length > 0) localStorage.removeItem('qline_ar');
   } catch(e) {
-    try { S.activeRides = JSON.parse(localStorage.getItem('qline_ar')||'{}'); } catch(e2) { S.activeRides = {}; }
+    // Fallback: lees eigen actieve rit uit localStorage
+    try {
+      const local = JSON.parse(localStorage.getItem('qline_ar')||'{}');
+      if (Object.keys(local).length > 0) {
+        S.activeRides = local;
+      } else {
+        // Probeer alleen eigen ritten op te halen
+        try {
+          const snap2 = await getDocs(query(collection(db,'active_rides'), where('user_id','==',S.user.uid)));
+          snap2.docs.forEach(d => { S.activeRides[d.data().vehicle_id] = {...d.data(), _docId: d.id}; });
+        } catch(e2) { S.activeRides = {}; }
+      }
+    } catch(e2) { S.activeRides = {}; }
   }
   const saved = JSON.parse(localStorage.getItem('qline_addr')||'[]');
   const qline = 'Haarbrinksweg 47, Geesteren';
