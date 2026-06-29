@@ -489,7 +489,7 @@ ${(() => {
 // ══════════════════════════════════════════════════════════════════
 window.goWizRijden = () => {
   const lastVid = getLastVehicle();
-  S.wiz = { step:1, vid: lastVid, km:'', addr:'', purpose:'', tripType:'Zakelijk', avid:'', endKm:'', endAddr:'', _kmCorrect: false };
+  S.wiz = { step:1, vid: lastVid, km:'', addr:'', purpose:'', tripType:'Zakelijk', avid:'', endKm:'', endAddr:'', _kmCorrect: false, _forceKm: false };
   // Pre-fill km en addr van vorig voertuig
   if (lastVid) {
     const v = S.vehicles.find(x => x.id === lastVid);
@@ -528,12 +528,15 @@ function renderWizRijden() {
       const km = v.last_km ? v.last_km + ' km' : 'geen stand bekend';
       return `<div class="wiz-vehicle-card ${sel?'selected':''} ${inUse?'inuse':''}"
         onclick="${inUse?'':'wizSelectVehicle(\''+v.id+'\')'}">
-        <div>
+        <div style="flex:1">
           <div style="font-size:18px;font-weight:700">${esc(v.license)}</div>
           <div style="font-size:13px;color:#888;margin-top:2px">${esc(v.brand||'')} ${esc(v.model||'')} · ${km}</div>
           ${inUse?'<div style="font-size:12px;color:#e74c3c;margin-top:3px">⚠️ Nu in gebruik</div>':''}
         </div>
-        ${sel ? '<div style="color:var(--red);font-size:22px">✓</div>' : ''}
+        <div style="display:flex;align-items:center;gap:8px">
+          ${sel ? '<div style="color:var(--red);font-size:22px">✓</div>' : ''}
+          ${sel && !inUse ? `<button onclick="event.stopPropagation();wizForceKmInput('${v.id}')" style="background:#f0f0f0;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;color:#555">✏️ km</button>` : ''}
+        </div>
       </div>`;
     }).join('');
 
@@ -938,10 +941,22 @@ window.wizSelectAVehicle = (vid) => {
   render();
 };
 
+window.wizForceKmInput = (vid) => {
+  S.wiz.vid = vid;
+  S.wiz._kmCorrect = false;
+  S.wiz._forceKm = true; // forceer km invoer stap
+  S.wiz.step = 2;
+  render();
+  window.scrollTo(0,0);
+};
+
 window.wizNext = () => {
-  // Voorkom dubbel klikken
   document.querySelectorAll('.wiz-next').forEach(b => b.disabled = true);
-  if (S.wiz.step === 1 && S.wiz.km) {
+  // Stap 2 overslaan als km bekend EN niet geforceerd
+  if (S.wiz.step === 1 && S.wiz.km && !S.wiz._forceKm) {
+    S.wiz.step = 3;
+  } else if (S.wiz.step === 2) {
+    S.wiz._forceKm = false; // reset na km invoer
     S.wiz.step = 3;
   } else if (S.wiz.step < 4) {
     S.wiz.step++;
@@ -951,8 +966,7 @@ window.wizNext = () => {
 };
 
 window.wizBack = () => {
-  // Stap 2 overslaan bij terug als km bekend is
-  if (S.wiz.step === 3 && S.wiz.km) {
+  if (S.wiz.step === 3 && S.wiz.km && !S.wiz._forceKm) {
     S.wiz.step = 1; render(); window.scrollTo(0,0);
   } else if (S.wiz.step > 1) {
     S.wiz.step--; render(); window.scrollTo(0,0);
