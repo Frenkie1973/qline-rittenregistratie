@@ -556,8 +556,8 @@ ${cards}
     const v = S.vehicles.find(x => x.id === S.wiz.vid);
     const hasKnownKm = !!S.wiz.km;
 
-    if (hasKnownKm) {
-      // Bekende stand — toon ter bevestiging, geen invoer nodig
+    if (hasKnownKm && !S.wiz._editKm) {
+      // Bekende stand — bevestig of wijzig
       content = `
 <div class="wiz-label">Stap 2 van ${totalSteps}</div>
 <div class="wiz-question">Klopt de kilometerstand?</div>
@@ -566,29 +566,29 @@ ${cards}
   <div style="font-size:15px;color:#888;margin-top:4px">km — ${esc(v?.license||'')} · ${esc(v?.brand||'')}</div>
 </div>
 <button class="wiz-next ready" onclick="wizNext()">✓ Klopt — verder</button>
-<button onclick="wizKmCorrect()" style="width:100%;margin-top:10px;padding:14px;background:#fff;border:1px solid var(--border);border-radius:10px;font-size:15px;cursor:pointer;color:#555">
-  ✏️ Andere stand invullen
+<button onclick="S.wiz._editKm=true;render()" style="width:100%;margin-top:10px;padding:16px;background:#f0f0f0;border:none;border-radius:10px;font-size:16px;cursor:pointer;color:#555;font-family:inherit;font-weight:600">
+  ✏️ Stand klopt niet — wijzigen
 </button>`;
     } else {
-      // Geen stand bekend — moet invullen
+      // Invoerveld voor km
       content = `
 <div class="wiz-label">Stap 2 van ${totalSteps}</div>
-<div class="wiz-question">Wat is de huidige kilometerstand?</div>
-<div class="alert aw" style="margin-bottom:16px">Eerste rit voor dit voertuig — vul de beginstand in</div>
+<div class="wiz-question">${hasKnownKm ? 'Vul de juiste kilometerstand in' : 'Wat is de huidige kilometerstand?'}</div>
+${hasKnownKm ? `<div class="alert ai" style="margin-bottom:16px">Huidige stand: <strong>${esc(S.wiz.km)} km</strong></div>` : '<div class="alert aw" style="margin-bottom:16px">Eerste rit voor dit voertuig — vul de beginstand in</div>'}
 <div style="display:flex;gap:8px;align-items:center">
-  <input class="wiz-input-big" type="number" id="wiz-km" value=""
-    placeholder="bijv. 171962"
-    oninput="S.wiz.km=this.value;wizCheckNext2()"
-    inputmode="numeric" autofocus style="flex:1"/>
-  <button id="mic-btn-km" onclick="speechKm()" title="Spreek de kilometerstand in"
-    style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:10px;padding:12px 14px;cursor:pointer;font-size:22px;flex-shrink:0">🎤</button>
+  <input class="wiz-input-big" type="number" id="wiz-km" value="${esc(S.wiz.km)}"
+    placeholder="bijv. 171962" inputmode="numeric" style="flex:1"
+    oninput="S.wiz.km=this.value;wizCheckNext2()"/>
+  <button id="mic-btn-km" onclick="speechKm()" style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:10px;padding:12px 14px;cursor:pointer;font-size:22px;flex-shrink:0">🎤</button>
 </div>
-<div class="wiz-hint">Tik of spreek de stand in</div>
-<button class="wiz-next" id="wiz-next2" onclick="wizNext()" disabled>Volgende →</button>`;
+<div class="wiz-hint">Vul de stand in zoals op de teller</div>
+<button class="wiz-next ${S.wiz.km?'ready':''}" id="wiz-next2" onclick="S.wiz._editKm=false;wizNext()" ${S.wiz.km?'':'disabled'}>
+  Volgende →
+</button>`;
     }
   }
 
-  else if (step === 3) {
+    else if (step === 3) {
     const saved = getSavedAddresses();
     const kmCorrectMode = S.wiz._kmCorrect;
     const suggestions = saved.slice(0,4).map(a =>
@@ -602,22 +602,10 @@ ${cards}
 <div class="wiz-label">Stap ${displayStep} van ${totalSteps}</div>
 <div class="wiz-question">Waar vertrek je vandaan?</div>
 
-${kmCorrectMode ? `
-<div style="margin-bottom:16px">
-  <label style="font-size:13px;font-weight:600;color:#555;display:block;margin-bottom:6px">Kilometerstand corrigeren</label>
-  <div style="display:flex;gap:8px;align-items:center">
-    <input class="wiz-input-big" type="number" id="wiz-km-fix" value="${esc(S.wiz.km)}"
-      placeholder="bijv. 171962" inputmode="numeric" style="flex:1"
-      oninput="S.wiz.km=this.value;document.getElementById('wiz-km-disp').textContent=this.value"/>
-    <button id="mic-btn-km" onclick="speechKm()" style="background:#f0f4ff;border:1px solid #c0ccee;border-radius:10px;padding:12px 14px;cursor:pointer;font-size:22px;flex-shrink:0">🎤</button>
-  </div>
-  <button onclick="S.wiz._kmCorrect=false;render()" style="margin-top:8px;width:100%;padding:10px;background:#f0f0f0;border:none;border-radius:8px;cursor:pointer;font-size:14px">✓ Opslaan</button>
-</div>` : `
-<div style="display:flex;align-items:center;justify-content:space-between;background:#f8f8f8;border-radius:8px;padding:10px 14px;margin-bottom:14px">
-  <span style="font-size:13px;color:#888">Beginstand: <strong id="wiz-km-disp">${esc(S.wiz.km)}</strong> km</span>
-  <button onclick="S.wiz._kmCorrect=true;render()" style="background:none;border:none;color:var(--red);font-size:13px;cursor:pointer;font-weight:600">✏️ Aanpassen</button>
-</div>`}
-
+`
+<div style="background:#f8f8f8;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#888">
+  Beginstand: <strong>${esc(S.wiz.km)} km</strong>
+</div>
 <div style="display:flex;gap:8px;margin-bottom:12px">
   <input class="wiz-input-std" type="text" id="wiz-addr" value="${esc(S.wiz.addr)}"
     placeholder="Adres of locatie..."
@@ -952,25 +940,14 @@ window.wizForceKmInput = (vid) => {
 
 window.wizNext = () => {
   document.querySelectorAll('.wiz-next').forEach(b => b.disabled = true);
-  // Stap 2 overslaan als km bekend EN niet geforceerd
-  if (S.wiz.step === 1 && S.wiz.km && !S.wiz._forceKm) {
-    S.wiz.step = 3;
-  } else if (S.wiz.step === 2) {
-    S.wiz._forceKm = false; // reset na km invoer
-    S.wiz.step = 3;
-  } else if (S.wiz.step < 4) {
-    S.wiz.step++;
-  }
+  // Altijd stap voor stap
+  if (S.wiz.step < 4) S.wiz.step++;
   render();
   window.scrollTo(0,0);
 };
 
 window.wizBack = () => {
-  if (S.wiz.step === 3 && S.wiz.km && !S.wiz._forceKm) {
-    S.wiz.step = 1; render(); window.scrollTo(0,0);
-  } else if (S.wiz.step > 1) {
-    S.wiz.step--; render(); window.scrollTo(0,0);
-  }
+  if (S.wiz.step > 1) { S.wiz.step--; render(); window.scrollTo(0,0); }
 };
 
 window.wizANext = () => {
