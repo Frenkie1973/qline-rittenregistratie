@@ -949,25 +949,14 @@ window.wizForceKmInput = (vid) => {
 
 window.wizNext = () => {
   document.querySelectorAll('.wiz-next').forEach(b => b.disabled = true);
-  // Stap 2 overslaan als km bekend EN niet geforceerd
-  if (S.wiz.step === 1 && S.wiz.km && !S.wiz._forceKm) {
-    S.wiz.step = 3;
-  } else if (S.wiz.step === 2) {
-    S.wiz._forceKm = false; // reset na km invoer
-    S.wiz.step = 3;
-  } else if (S.wiz.step < 4) {
-    S.wiz.step++;
-  }
+  if (S.wiz.step === 2) S.wiz._editKm = false;
+  if (S.wiz.step < 4) S.wiz.step++;
   render();
   window.scrollTo(0,0);
 };
 
 window.wizBack = () => {
-  if (S.wiz.step === 3 && S.wiz.km && !S.wiz._forceKm) {
-    S.wiz.step = 1; render(); window.scrollTo(0,0);
-  } else if (S.wiz.step > 1) {
-    S.wiz.step--; render(); window.scrollTo(0,0);
-  }
+  if (S.wiz.step > 1) { S.wiz.step--; render(); window.scrollTo(0,0); }
 };
 
 window.wizANext = () => {
