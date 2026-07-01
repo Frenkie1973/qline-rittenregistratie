@@ -533,10 +533,7 @@ function renderWizRijden() {
           <div style="font-size:13px;color:#888;margin-top:2px">${esc(v.brand||'')} ${esc(v.model||'')} · ${km}</div>
           ${inUse?'<div style="font-size:12px;color:#e74c3c;margin-top:3px">⚠️ Nu in gebruik</div>':''}
         </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          ${sel ? '<div style="color:var(--red);font-size:22px">✓</div>' : ''}
-          ${sel && !inUse ? `<button onclick="event.stopPropagation();wizForceKmInput('${v.id}')" style="background:#f0f0f0;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;color:#555">✏️ km</button>` : ''}
-        </div>
+        ${sel ? '<div style="color:var(--red);font-size:22px">✓</div>' : ''}
       </div>`;
     }).join('');
 
