@@ -562,9 +562,9 @@ ${cards}
   <div style="font-size:48px;font-weight:800;color:var(--red);letter-spacing:-1px">${esc(S.wiz.km)}</div>
   <div style="font-size:15px;color:#888;margin-top:4px">km — ${esc(v?.license||'')} · ${esc(v?.brand||'')}</div>
 </div>
-<button class="wiz-next ready" style="margin-bottom:12px" onclick="wizNext()">✓ Klopt — verder</button>
+<button class="wiz-next ready" style="margin-bottom:12px;background:#27ae60" onclick="wizNext()">✓ Klopt — verder</button>
 <div style="text-align:center;color:#aaa;font-size:13px;margin-bottom:10px">— of —</div>
-<button onclick="S.wiz._editKm=true;render()" style="width:100%;padding:16px;background:#fff;border:2px solid #ddd;border-radius:10px;font-size:15px;cursor:pointer;color:#888;font-family:inherit">
+<button onclick="S.wiz._editKm=true;render()" style="width:100%;padding:16px;background:#e74c3c;border:none;border-radius:10px;font-size:15px;cursor:pointer;color:#fff;font-family:inherit;font-weight:600">
   ✏️ Stand klopt niet — wijzigen
 </button>`;
     } else {
