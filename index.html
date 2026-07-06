@@ -564,7 +564,7 @@ ${cards}
 </div>
 <button class="wiz-next ready" style="margin-bottom:12px;background:#27ae60" onclick="wizNext()">✓ Klopt — verder</button>
 <div style="text-align:center;color:#aaa;font-size:13px;margin-bottom:10px">— of —</div>
-<button onclick="S.wiz._editKm=true;render()" style="width:100%;padding:16px;background:#e74c3c;border:none;border-radius:10px;font-size:15px;cursor:pointer;color:#fff;font-family:inherit;font-weight:600">
+<button onclick="wizEditKm()" style="width:100%;padding:16px;background:#e74c3c;border:none;border-radius:10px;font-size:15px;cursor:pointer;color:#fff;font-family:inherit;font-weight:600">
   ✏️ Stand klopt niet — wijzigen
 </button>`;
     } else {
@@ -970,6 +970,8 @@ window.wizABack = () => {
   const minStep = actief.length > 1 ? 1 : 2;
   if (S.wiz.step > minStep) { S.wiz.step--; render(); window.scrollTo(0,0); }
 };
+
+window.wizEditKm = () => { S.wiz._editKm = true; render(); setTimeout(()=>document.getElementById('wiz-km')?.focus(),100); };
 
 window.wizKmCorrect = () => {
   S.wiz._editKm = true;
