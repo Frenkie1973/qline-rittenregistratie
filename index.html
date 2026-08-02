@@ -168,6 +168,23 @@ window.nowDate = nowDate;
 window.nowTime = nowTime;
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
+// ── Timeout-wrapper ──────────────────────────────────────────────────────────
+// Voorkomt dat de app "bevriest" wanneer een netwerkverbinding (mobiel, slecht
+// bereik) een fetch/Firestore-call laat hangen. Na TIMEOUT_MS geeft dit een
+// duidelijke foutmelding i.p.v. eindeloos wachten met een geblokkeerde knop.
+const TIMEOUT_MS = 12000;
+function withTimeout(promise, label='Actie') {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      reject(new Error(`${label} duurt te lang — controleer je verbinding en probeer opnieuw`));
+    }, TIMEOUT_MS);
+    promise.then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); }
+    );
+  });
+}
+
 function flash(msg, type='success') {
   S.msg = msg; S.msgType = type;
   render();
@@ -234,7 +251,7 @@ async function saveAR_start(vid, ride) {
     notes: '', detour: false, detour_reason: '', private_km: 0,
     status: 'onderweg', created_at: serverTimestamp()
   };
-  const ref = await addDoc(collection(db,'trips'), tripData);
+  const ref = await withTimeout(addDoc(collection(db,'trips'), tripData), 'Rit starten');
   ride._docId = ref.id;
   S.activeRides[vid] = ride;
   S.trips.unshift({id: ref.id, ...tripData});
@@ -1073,8 +1090,11 @@ window.wizGetGPS = () => {
   if (!navigator.geolocation) { inp.placeholder='GPS niet beschikbaar'; inp.disabled=false; return; }
   navigator.geolocation.getCurrentPosition(
     async (pos) => {
+      const ac = new AbortController();
+      const to = setTimeout(()=>ac.abort(), 8000);
       try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json&accept-language=nl`,{headers:{'User-Agent':'QLine-Rittenregistratie'}});
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json&accept-language=nl`,{headers:{'User-Agent':'QLine-Rittenregistratie'},signal:ac.signal});
+        clearTimeout(to);
         const data = await res.json();
         const a = data.address;
         const straat = a.road||a.pedestrian||a.path||'';
@@ -1088,6 +1108,7 @@ window.wizGetGPS = () => {
         saveAddress(adres);
         wizCheckNext3();
       } catch(e) {
+        clearTimeout(to);
         S.wiz.addr = pos.coords.latitude.toFixed(5)+', '+pos.coords.longitude.toFixed(5);
         inp.value = S.wiz.addr;
         inp.disabled = false;
@@ -1107,8 +1128,11 @@ window.wizGetEndGPS = () => {
   if (!navigator.geolocation) { inp.placeholder='GPS niet beschikbaar'; inp.disabled=false; return; }
   navigator.geolocation.getCurrentPosition(
     async (pos) => {
+      const ac = new AbortController();
+      const to = setTimeout(()=>ac.abort(), 8000);
       try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json&accept-language=nl`,{headers:{'User-Agent':'QLine-Rittenregistratie'}});
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json&accept-language=nl`,{headers:{'User-Agent':'QLine-Rittenregistratie'},signal:ac.signal});
+        clearTimeout(to);
         const data = await res.json();
         const a = data.address;
         const straat = a.road||a.pedestrian||a.path||'';
@@ -1122,6 +1146,7 @@ window.wizGetEndGPS = () => {
         saveAddress(adres);
         wizCheckANext2();
       } catch(e) {
+        clearTimeout(to);
         S.wiz.endAddr = pos.coords.latitude.toFixed(5)+', '+pos.coords.longitude.toFixed(5);
         inp.value = S.wiz.endAddr;
         inp.disabled = false;
@@ -1183,10 +1208,10 @@ window.wizStopRit = async () => {
     if (ride._docId) {
       // Verwijder de 'onderweg' trip en maak nieuwe 'open' trip aan
       // (vermijdt updateDoc rechten problemen)
-      try { await deleteDoc(doc(db,'trips', ride._docId)); } catch(e) {}
+      try { await withTimeout(deleteDoc(doc(db,'trips', ride._docId)), 'Oude rit verwijderen'); } catch(e) {}
     }
     // Maak nieuwe voltooide trip aan
-    await addDoc(collection(db,'trips'),{
+    await withTimeout(addDoc(collection(db,'trips'),{
       vehicle_id: vid, vehicle_license: v?.license||'',
       user_id: ride.user_id, user_name: ride.user_name,
       trip_date: ride.trip_date, departure_time: ride.dep_time||'',
@@ -1196,7 +1221,7 @@ window.wizStopRit = async () => {
       purpose: ride.purpose, trip_type: ride.trip_type||'Zakelijk',
       notes: '', detour: false, detour_reason: '', private_km: 0,
       status: 'open', created_at: serverTimestamp(),
-    });
+    }), 'Rit opslaan');
     if (v) { v.last_km=endKm; v.last_addr=addr; v.last_date=ride.trip_date; }
     setVehicleKm(vid, endKm, addr);
     localStorage.setItem('qline_last_addr_' + vid, addr);
@@ -1216,11 +1241,13 @@ window.wizStopRit = async () => {
 window.annuleerRit = async (vid) => {
   if (!vid) { flash('Geen actieve rit gevonden','error'); return; }
   const ride = S.activeRides[vid];
+  // Lokale state wordt altijd meteen opgeschoond, ongeacht of de Firestore-
+  // delete lukt. Zo blijft een rit nooit vastzitten in de UI als de server-
+  // call traag is of faalt (dit loste "ritten lopen vast" op).
+  delete S.activeRides[vid];
   if (ride?._docId) {
-    try { await deleteDoc(doc(db,'trips', ride._docId)); } catch(e) {}
     S.trips = S.trips.filter(t => t.id !== ride._docId);
   }
-  delete S.activeRides[vid];
   try {
     const ar = JSON.parse(localStorage.getItem('qline_ar')||'{}');
     delete ar[vid];
@@ -1228,6 +1255,14 @@ window.annuleerRit = async (vid) => {
   } catch(e) {}
   flash('Rit geannuleerd');
   go('dash');
+  if (ride?._docId) {
+    try {
+      await withTimeout(deleteDoc(doc(db,'trips', ride._docId)), 'Rit verwijderen');
+    } catch(e) {
+      // UI is al opgeschoond; alleen loggen zodat het geen zichtbare blokkade wordt
+      console.warn('Annuleren op server mislukt (lokaal wel verwijderd):', e.message);
+    }
+  }
 };
 
 // ── Trips list ────────────────────────────────────────────────────────────────
