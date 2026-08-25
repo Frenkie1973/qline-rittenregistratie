@@ -7,7 +7,10 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-title" content="Q-Line Ritten"/>
 <title>Q-Line Rittenregistratie</title>
-<!-- v2.1 -->
+<!-- v2.2 — auto-update check toegevoegd -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f5f5;color:#1a1a1a}
@@ -137,6 +140,13 @@ const app  = initializeApp(FB);
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
+// ── Versiecontrole ────────────────────────────────────────────────────────────
+// Voorkomt dat monteurs op een verouderde, gecachte versie van de app blijven
+// werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
+// hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
+// staat en toont dan een banner om te verversen.
+const APP_VERSION = '2.2.0';
+
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
   user: null, profile: null,
@@ -147,6 +157,7 @@ const S = {
   detailTrip: null,
   adminTab: 'vehicles',
   msg: null, msgType: 'success',
+  updateAvailable: false,
   ff: { from:'', to:'', type:'', status:'', search:'' },
   // Wizard state
   wiz: {
@@ -295,6 +306,23 @@ function saveAddress(addr) {
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
+async function checkForUpdate() {
+  try {
+    const res = await fetch('./version.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.version && data.version !== APP_VERSION && !S.updateAvailable) {
+      S.updateAvailable = true;
+      render();
+    }
+  } catch (e) { /* geen verbinding — gewoon negeren, volgende check probeert opnieuw */ }
+}
+checkForUpdate();
+setInterval(checkForUpdate, 4 * 60 * 1000); // elke 4 minuten
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
+window.addEventListener('focus', checkForUpdate);
+window.doForceUpdate = () => { location.reload(); };
+
 const authTO = setTimeout(() => { if(S.loading){S.loading=false;render();} }, 8000);
 onAuthStateChanged(auth, async u => {
   clearTimeout(authTO);
@@ -345,11 +373,15 @@ function loadVehicleStatus() {
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
+function updateBanner() {
+  if (!S.updateAvailable) return '';
+  return `<div onclick="doForceUpdate()" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#C0392B;color:#fff;text-align:center;padding:14px;font-size:16px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3)">🔄 Nieuwe versie beschikbaar — tik hier om te verversen</div>`;
+}
 function render() {
   window.S = S;
-  if (S.loading) { R.innerHTML = '<div class="spin"><div class="sr"></div></div>'; return; }
-  if (!S.user)   { R.innerHTML = renderLogin(); bindLogin(); return; }
-  R.innerHTML = renderShell();
+  if (S.loading) { R.innerHTML = updateBanner() + '<div class="spin"><div class="sr"></div></div>'; return; }
+  if (!S.user)   { R.innerHTML = updateBanner() + renderLogin(); bindLogin(); return; }
+  R.innerHTML = updateBanner() + renderShell();
   bindEvents();
 }
 
