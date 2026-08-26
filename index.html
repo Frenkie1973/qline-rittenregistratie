@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '2.3.0';
+const APP_VERSION = '2.3.1';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -263,22 +263,22 @@ async function saveAR_start(vid, ride) {
     status: 'onderweg', created_at: serverTimestamp()
   };
   const tripRef = doc(collection(db,'trips'));
-  const statusRef = doc(db,'vehicle_status', vid);
+  const vehicleRef = doc(db,'vehicles', vid);
   // ── Atomaire vergrendeling ──────────────────────────────────────────────────
   // Voorkomt dat twee mensen (bv. twee monteurs op verschillende telefoons)
   // vrijwel gelijktijdig dezelfde auto "starten", wat leidde tot dubbele/
-  // parallelle 0km-ritten. De transaction leest en schrijft het vergrendel-
-  // document atomisch: als iemand anders net iets eerder was, faalt dit met
-  // een duidelijke foutmelding i.p.v. dat er stilletjes een dubbele rit ontstaat.
+  // parallelle 0km-ritten. De transaction leest en schrijft atomisch op het
+  // bestaande voertuig-document (velden active_trip_id/active_by/active_since)
+  // — geen nieuwe collectie nodig, dus geen aparte Firestore-rules vereist.
   await withTimeout((async () => {
     await runTransaction(db, async (tx) => {
-      const statusSnap = await tx.get(statusRef);
-      if (statusSnap.exists() && statusSnap.data().active_trip_id) {
-        const by = statusSnap.data().active_by || 'iemand anders';
+      const vSnap = await tx.get(vehicleRef);
+      if (vSnap.exists() && vSnap.data().active_trip_id) {
+        const by = vSnap.data().active_by || 'iemand anders';
         throw new Error(`Dit voertuig is zojuist al gestart door ${by}. Ververs de app (pull-to-refresh) en kies een ander voertuig.`);
       }
       tx.set(tripRef, tripData);
-      tx.set(statusRef, { active_trip_id: tripRef.id, active_by: ride.user_name, since: serverTimestamp() });
+      tx.set(vehicleRef, { active_trip_id: tripRef.id, active_by: ride.user_name, active_since: serverTimestamp() }, { merge: true });
     });
   })(), 'Rit starten');
   ride._docId = tripRef.id;
@@ -1264,7 +1264,7 @@ window.wizStopRit = async () => {
       try { await withTimeout(deleteDoc(doc(db,'trips', ride._docId)), 'Oude rit verwijderen'); } catch(e) {}
     }
     // Vergrendeling van het voertuig opheffen zodat een volgende rit gestart kan worden
-    try { await withTimeout(deleteDoc(doc(db,'vehicle_status', vid)), 'Voertuig vrijgeven'); } catch(e) {}
+    try { await withTimeout(updateDoc(doc(db,'vehicles', vid), { active_trip_id: '', active_by: '' }), 'Voertuig vrijgeven'); } catch(e) {}
     // Maak nieuwe voltooide trip aan
     await withTimeout(addDoc(collection(db,'trips'),{
       vehicle_id: vid, vehicle_license: v?.license||'',
@@ -1319,7 +1319,7 @@ window.annuleerRit = async (vid) => {
     }
   }
   // Vergrendeling van het voertuig altijd opheffen, ook als er geen _docId was
-  try { await withTimeout(deleteDoc(doc(db,'vehicle_status', vid)), 'Voertuig vrijgeven'); } catch(e) {}
+  try { await withTimeout(updateDoc(doc(db,'vehicles', vid), { active_trip_id: '', active_by: '' }), 'Voertuig vrijgeven'); } catch(e) {}
 };
 
 // ── Trips list ────────────────────────────────────────────────────────────────
@@ -1878,9 +1878,10 @@ window.resetAlleRitten = async () => {
   // Oude legacy collectie (niet meer actief gebruikt, voor de zekerheid opruimen)
   const snap = await getDocs(collection(db,'active_rides'));
   for (const d of snap.docs) await deleteDoc(doc(db,'active_rides',d.id));
-  // Vergrendelingen per voertuig opheffen
-  const statusSnap = await getDocs(collection(db,'vehicle_status'));
-  for (const d of statusSnap.docs) await deleteDoc(doc(db,'vehicle_status',d.id));
+  // Vergrendelingen per voertuig opheffen (velden op vehicles-documenten)
+  for (const v of S.vehicles) {
+    try { await updateDoc(doc(db,'vehicles', v.id), { active_trip_id: '', active_by: '' }); } catch(e) {}
+  }
   // Onderweg-trips verwijderen (dit zijn de "vastgelopen" ritten)
   const onderwegSnap = await getDocs(query(collection(db,'trips'), where('status','==','onderweg')));
   for (const d of onderwegSnap.docs) await deleteDoc(doc(db,'trips',d.id));
