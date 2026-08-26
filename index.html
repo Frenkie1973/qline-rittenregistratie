@@ -125,7 +125,7 @@ textarea{resize:vertical;min-height:70px}
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js';
-import { getFirestore, collection, addDoc, getDocs, getDoc, doc, updateDoc, setDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
+import { getFirestore, collection, addDoc, getDocs, getDoc, doc, updateDoc, setDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
 
 const FB = {
   apiKey: "AIzaSyAk4Xus-k0ZTCIMluh9QMslsg-I21uMoDQ",
@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '2.2.0';
+const APP_VERSION = '2.3.0';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -262,10 +262,28 @@ async function saveAR_start(vid, ride) {
     notes: '', detour: false, detour_reason: '', private_km: 0,
     status: 'onderweg', created_at: serverTimestamp()
   };
-  const ref = await withTimeout(addDoc(collection(db,'trips'), tripData), 'Rit starten');
-  ride._docId = ref.id;
+  const tripRef = doc(collection(db,'trips'));
+  const statusRef = doc(db,'vehicle_status', vid);
+  // ── Atomaire vergrendeling ──────────────────────────────────────────────────
+  // Voorkomt dat twee mensen (bv. twee monteurs op verschillende telefoons)
+  // vrijwel gelijktijdig dezelfde auto "starten", wat leidde tot dubbele/
+  // parallelle 0km-ritten. De transaction leest en schrijft het vergrendel-
+  // document atomisch: als iemand anders net iets eerder was, faalt dit met
+  // een duidelijke foutmelding i.p.v. dat er stilletjes een dubbele rit ontstaat.
+  await withTimeout((async () => {
+    await runTransaction(db, async (tx) => {
+      const statusSnap = await tx.get(statusRef);
+      if (statusSnap.exists() && statusSnap.data().active_trip_id) {
+        const by = statusSnap.data().active_by || 'iemand anders';
+        throw new Error(`Dit voertuig is zojuist al gestart door ${by}. Ververs de app (pull-to-refresh) en kies een ander voertuig.`);
+      }
+      tx.set(tripRef, tripData);
+      tx.set(statusRef, { active_trip_id: tripRef.id, active_by: ride.user_name, since: serverTimestamp() });
+    });
+  })(), 'Rit starten');
+  ride._docId = tripRef.id;
   S.activeRides[vid] = ride;
-  S.trips.unshift({id: ref.id, ...tripData});
+  S.trips.unshift({id: tripRef.id, ...tripData});
   try {
     const ar = JSON.parse(localStorage.getItem('qline_ar')||'{}');
     ar[vid] = ride;
@@ -547,6 +565,9 @@ window.goWizRijden = () => {
     S.wiz.addr = localStorage.getItem('qline_last_addr_' + lastVid) || v?.last_addr || lsKm?.addr || '';
   }
   go('rijden');
+  // Actuele status ophalen zodat "in gebruik" badges niet verouderd zijn
+  // (voorkomt dat twee monteurs tegelijk dezelfde, net vertrokken auto kiezen)
+  loadTrips().then(() => { loadAR(); render(); }).catch(()=>{});
 };
 
 function renderWizRijden() {
@@ -1242,6 +1263,8 @@ window.wizStopRit = async () => {
       // (vermijdt updateDoc rechten problemen)
       try { await withTimeout(deleteDoc(doc(db,'trips', ride._docId)), 'Oude rit verwijderen'); } catch(e) {}
     }
+    // Vergrendeling van het voertuig opheffen zodat een volgende rit gestart kan worden
+    try { await withTimeout(deleteDoc(doc(db,'vehicle_status', vid)), 'Voertuig vrijgeven'); } catch(e) {}
     // Maak nieuwe voltooide trip aan
     await withTimeout(addDoc(collection(db,'trips'),{
       vehicle_id: vid, vehicle_license: v?.license||'',
@@ -1295,6 +1318,8 @@ window.annuleerRit = async (vid) => {
       console.warn('Annuleren op server mislukt (lokaal wel verwijderd):', e.message);
     }
   }
+  // Vergrendeling van het voertuig altijd opheffen, ook als er geen _docId was
+  try { await withTimeout(deleteDoc(doc(db,'vehicle_status', vid)), 'Voertuig vrijgeven'); } catch(e) {}
 };
 
 // ── Trips list ────────────────────────────────────────────────────────────────
@@ -1850,9 +1875,17 @@ window.changeRole = async (id, role) => {
 };
 
 window.resetAlleRitten = async () => {
+  // Oude legacy collectie (niet meer actief gebruikt, voor de zekerheid opruimen)
   const snap = await getDocs(collection(db,'active_rides'));
   for (const d of snap.docs) await deleteDoc(doc(db,'active_rides',d.id));
+  // Vergrendelingen per voertuig opheffen
+  const statusSnap = await getDocs(collection(db,'vehicle_status'));
+  for (const d of statusSnap.docs) await deleteDoc(doc(db,'vehicle_status',d.id));
+  // Onderweg-trips verwijderen (dit zijn de "vastgelopen" ritten)
+  const onderwegSnap = await getDocs(query(collection(db,'trips'), where('status','==','onderweg')));
+  for (const d of onderwegSnap.docs) await deleteDoc(doc(db,'trips',d.id));
   S.activeRides = {};
+  await loadTrips();
   flash('Alle actieve ritten gereset'); go('dash');
 };
 
