@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '2.4.0';
+const APP_VERSION = '2.4.1';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -1615,7 +1615,10 @@ function renderAdminActive() {
 <div class="card" style="margin-bottom:16px">
   <div class="ch">🔧 Doel bulk-wijzigen</div>
   <div style="padding:14px 16px">
-    <p style="font-size:13px;color:#666;margin-bottom:10px">Wijzig het doel-veld van alle ritten met een bepaalde tekst in een andere tekst (hoofdlettergevoelig, exacte match).</p>
+    <p style="font-size:13px;color:#666;margin-bottom:10px">Wijzig het doel-veld van ritten met een bepaalde tekst in een andere tekst (hoofdlettergevoelig, exacte match). Doorzoekt de hele database, niet alleen wat op je scherm staat.</p>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#333;margin-bottom:10px">
+      <input type="checkbox" id="bulk-approved-only" checked/> Alleen goedgekeurde ritten
+    </label>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <input id="bulk-from" type="text" placeholder="Van (bv. naar huis)" style="flex:1;min-width:140px;padding:10px;border:1px solid #ddd;border-radius:8px"/>
       <span>→</span>
@@ -1889,16 +1892,26 @@ window.changeRole = async (id, role) => {
 window.bulkChangePurpose = async () => {
   const from = document.getElementById('bulk-from')?.value.trim();
   const to = document.getElementById('bulk-to')?.value.trim();
+  const onlyApproved = document.getElementById('bulk-approved-only')?.checked;
   if (!from || !to) { flash('Vul beide velden in','error'); return; }
-  const matches = S.trips.filter(t => t.purpose === from);
-  if (matches.length === 0) { flash(`Geen ritten gevonden met doel "${from}"`,'error'); return; }
-  if (!confirm(`${matches.length} rit(ten) met doel "${from}" wijzigen naar "${to}"?`)) return;
+  flash('Zoeken in database...');
+  // Eén where-clause op purpose (altijd geïndexeerd); status-filter gebeurt
+  // hierna in JS om een Firestore composite-index-vereiste te vermijden.
+  let qBase = query(collection(db,'trips'), where('purpose','==',from));
+  let snap;
+  try {
+    snap = await withTimeout(getDocs(qBase), 'Ritten zoeken');
+  } catch(e) { flash('Fout bij zoeken: '+e.message,'error'); return; }
+  const matches = onlyApproved ? snap.docs.filter(d => d.data().status === 'goedgekeurd') : snap.docs;
+  if (matches.length === 0) { flash(`Geen${onlyApproved?' goedgekeurde':''} ritten gevonden met doel "${from}"`,'error'); return; }
+  if (!confirm(`${matches.length}${onlyApproved?' goedgekeurde':''} rit(ten) met doel "${from}" wijzigen naar "${to}"?`)) return;
   flash(`Bezig met wijzigen van ${matches.length} rit(ten)...`);
   let ok = 0, fail = 0;
-  for (const t of matches) {
+  for (const d of matches) {
     try {
-      await withTimeout(updateDoc(doc(db,'trips', t.id), { purpose: to }), 'Doel wijzigen');
-      t.purpose = to;
+      await withTimeout(updateDoc(doc(db,'trips', d.id), { purpose: to }), 'Doel wijzigen');
+      const local = S.trips.find(t => t.id === d.id);
+      if (local) local.purpose = to;
       ok++;
     } catch(e) { fail++; }
   }
