@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '2.3.1';
+const APP_VERSION = '2.4.0';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -1612,6 +1612,18 @@ window.saveManualTrip = async () => {
 function renderAdminActive() {
   const actief = Object.entries(S.activeRides);
   return `
+<div class="card" style="margin-bottom:16px">
+  <div class="ch">🔧 Doel bulk-wijzigen</div>
+  <div style="padding:14px 16px">
+    <p style="font-size:13px;color:#666;margin-bottom:10px">Wijzig het doel-veld van alle ritten met een bepaalde tekst in een andere tekst (hoofdlettergevoelig, exacte match).</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input id="bulk-from" type="text" placeholder="Van (bv. naar huis)" style="flex:1;min-width:140px;padding:10px;border:1px solid #ddd;border-radius:8px"/>
+      <span>→</span>
+      <input id="bulk-to" type="text" placeholder="Naar (bv. naar zaak)" style="flex:1;min-width:140px;padding:10px;border:1px solid #ddd;border-radius:8px"/>
+      <button class="btn bp bsm" onclick="bulkChangePurpose()">Wijzig</button>
+    </div>
+  </div>
+</div>
 <div class="card">
   <div class="ch" style="display:flex;align-items:center;justify-content:space-between">
     <span>Actieve ritten (${actief.length})</span>
@@ -1872,6 +1884,26 @@ window.changeRole = async (id, role) => {
   await updateDoc(doc(db,'users',id),{role});
   S.users = S.users.map(u => u.id===id?{...u,role}:u);
   flash('Rol bijgewerkt ✓'); render();
+};
+
+window.bulkChangePurpose = async () => {
+  const from = document.getElementById('bulk-from')?.value.trim();
+  const to = document.getElementById('bulk-to')?.value.trim();
+  if (!from || !to) { flash('Vul beide velden in','error'); return; }
+  const matches = S.trips.filter(t => t.purpose === from);
+  if (matches.length === 0) { flash(`Geen ritten gevonden met doel "${from}"`,'error'); return; }
+  if (!confirm(`${matches.length} rit(ten) met doel "${from}" wijzigen naar "${to}"?`)) return;
+  flash(`Bezig met wijzigen van ${matches.length} rit(ten)...`);
+  let ok = 0, fail = 0;
+  for (const t of matches) {
+    try {
+      await withTimeout(updateDoc(doc(db,'trips', t.id), { purpose: to }), 'Doel wijzigen');
+      t.purpose = to;
+      ok++;
+    } catch(e) { fail++; }
+  }
+  flash(`✓ ${ok} rit(ten) gewijzigd naar "${to}"` + (fail?` (${fail} mislukt)`:''));
+  render();
 };
 
 window.resetAlleRitten = async () => {
