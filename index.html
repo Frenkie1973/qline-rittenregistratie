@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '2.4.1';
+const APP_VERSION = '2.4.2';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -1895,15 +1895,22 @@ window.bulkChangePurpose = async () => {
   const onlyApproved = document.getElementById('bulk-approved-only')?.checked;
   if (!from || !to) { flash('Vul beide velden in','error'); return; }
   flash('Zoeken in database...');
-  // Eén where-clause op purpose (altijd geïndexeerd); status-filter gebeurt
-  // hierna in JS om een Firestore composite-index-vereiste te vermijden.
-  let qBase = query(collection(db,'trips'), where('purpose','==',from));
+  // Hele trips-collectie ophalen en hoofdletter-/spatie-ongevoelig matchen.
+  // (Een exacte Firestore where-match miste ritten door verschil in hoofdletters
+  // of spaties, bv. "Naar huis" vs "naar huis" vs "naar huis ".)
   let snap;
   try {
-    snap = await withTimeout(getDocs(qBase), 'Ritten zoeken');
+    snap = await withTimeout(getDocs(collection(db,'trips')), 'Ritten zoeken');
   } catch(e) { flash('Fout bij zoeken: '+e.message,'error'); return; }
-  const matches = onlyApproved ? snap.docs.filter(d => d.data().status === 'goedgekeurd') : snap.docs;
-  if (matches.length === 0) { flash(`Geen${onlyApproved?' goedgekeurde':''} ritten gevonden met doel "${from}"`,'error'); return; }
+  const fromNorm = from.toLowerCase();
+  let matches = snap.docs.filter(d => (d.data().purpose||'').trim().toLowerCase() === fromNorm);
+  if (onlyApproved) matches = matches.filter(d => d.data().status === 'goedgekeurd');
+  if (matches.length === 0) {
+    // Laat zien welke doel-teksten wél lijken op wat is ingevuld, ter hulp bij debuggen
+    const suggesties = [...new Set(snap.docs.map(d=>d.data().purpose).filter(p=>p && p.toLowerCase().includes(fromNorm.split(' ')[0])))].slice(0,5);
+    flash(`Geen${onlyApproved?' goedgekeurde':''} ritten gevonden met doel "${from}"` + (suggesties.length?`. Gevonden in database: ${suggesties.map(s=>'"'+s+'"').join(', ')}`:''),'error');
+    return;
+  }
   if (!confirm(`${matches.length}${onlyApproved?' goedgekeurde':''} rit(ten) met doel "${from}" wijzigen naar "${to}"?`)) return;
   flash(`Bezig met wijzigen van ${matches.length} rit(ten)...`);
   let ok = 0, fail = 0;
