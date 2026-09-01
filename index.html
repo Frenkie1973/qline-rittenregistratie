@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '2.4.2';
+const APP_VERSION = '2.5.0';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -593,7 +593,15 @@ function renderWizRijden() {
   if (step === 1) {
     // Voertuig kiezen
     const cards = S.vehicles.map(v => {
-      const inUse = !!S.activeRides[v.id];
+      // "In gebruik" wordt nu bepaald op basis van het voertuig-document zelf
+      // (active_trip_id), niet op S.activeRides — die laatste is voor
+      // niet-admins gefilterd op alleen hun eigen ritten en gaf daardoor een
+      // onjuist beeld. Een vergrendeling die langer dan 6 uur oud is wordt
+      // als vastgelopen beschouwd en telt niet meer mee (zelfherstel, zodat
+      // niemand handmatig "Reset alles" hoeft te gebruiken bij een hangende rit).
+      const lockAgeMs = v.active_since?.toMillis ? (Date.now() - v.active_since.toMillis()) : 0;
+      const lockStale = lockAgeMs > 6 * 60 * 60 * 1000;
+      const inUse = !!v.active_trip_id && !lockStale;
       const sel = S.wiz.vid === v.id;
       const km = v.last_km ? v.last_km + ' km' : 'geen stand bekend';
       return `<div class="wiz-vehicle-card ${sel?'selected':''} ${inUse?'inuse':''}"
