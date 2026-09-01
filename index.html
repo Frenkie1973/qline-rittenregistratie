@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '2.5.0';
+const APP_VERSION = '2.5.1';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -262,25 +262,33 @@ async function saveAR_start(vid, ride) {
     notes: '', detour: false, detour_reason: '', private_km: 0,
     status: 'onderweg', created_at: serverTimestamp()
   };
-  const tripRef = doc(collection(db,'trips'));
+  let tripRef = doc(collection(db,'trips'));
   const vehicleRef = doc(db,'vehicles', vid);
-  // ── Atomaire vergrendeling ──────────────────────────────────────────────────
-  // Voorkomt dat twee mensen (bv. twee monteurs op verschillende telefoons)
-  // vrijwel gelijktijdig dezelfde auto "starten", wat leidde tot dubbele/
-  // parallelle 0km-ritten. De transaction leest en schrijft atomisch op het
-  // bestaande voertuig-document (velden active_trip_id/active_by/active_since)
-  // — geen nieuwe collectie nodig, dus geen aparte Firestore-rules vereist.
-  await withTimeout((async () => {
-    await runTransaction(db, async (tx) => {
-      const vSnap = await tx.get(vehicleRef);
-      if (vSnap.exists() && vSnap.data().active_trip_id) {
-        const by = vSnap.data().active_by || 'iemand anders';
-        throw new Error(`Dit voertuig is zojuist al gestart door ${by}. Ververs de app (pull-to-refresh) en kies een ander voertuig.`);
-      }
-      tx.set(tripRef, tripData);
-      tx.set(vehicleRef, { active_trip_id: tripRef.id, active_by: ride.user_name, active_since: serverTimestamp() }, { merge: true });
-    });
-  })(), 'Rit starten');
+  // ── Atomaire vergrendeling (met veilige terugval) ────────────────────────────
+  // Voorkomt dat twee mensen vrijwel gelijktijdig dezelfde auto "starten".
+  // Als de vergrendeling zelf om wat voor reden dan ook mislukt (bv.
+  // schrijfrechten op vehicles ontbreken voor een monteur), wordt de rit
+  // alsnog gewoon gestart — beter een enkele keer geen dubbel-check dan dat
+  // niemand meer kan vertrekken.
+  try {
+    await withTimeout((async () => {
+      await runTransaction(db, async (tx) => {
+        const vSnap = await tx.get(vehicleRef);
+        if (vSnap.exists() && vSnap.data().active_trip_id) {
+          const by = vSnap.data().active_by || 'iemand anders';
+          throw new Error(`Dit voertuig is zojuist al gestart door ${by}. Ververs de app (pull-to-refresh) en kies een ander voertuig.`);
+        }
+        tx.set(tripRef, tripData);
+        tx.set(vehicleRef, { active_trip_id: tripRef.id, active_by: ride.user_name, active_since: serverTimestamp() }, { merge: true });
+      });
+    })(), 'Rit starten');
+  } catch (e) {
+    if (e?.message?.includes('is zojuist al gestart door')) throw e; // echte dubbele-boeking-fout: wel tonen
+    // Vergrendeling mislukt om andere reden (bv. rechten) — rit alsnog gewoon starten, zonder vergrendeling
+    console.warn('Vergrendeling mislukt, rit wordt zonder vergrendeling gestart:', e.message);
+    const ref = await withTimeout(addDoc(collection(db,'trips'), tripData), 'Rit starten (zonder vergrendeling)');
+    tripRef = ref;
+  }
   ride._docId = tripRef.id;
   S.activeRides[vid] = ride;
   S.trips.unshift({id: tripRef.id, ...tripData});
