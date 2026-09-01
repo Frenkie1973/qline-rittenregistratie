@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '2.5.1';
+const APP_VERSION = '2.5.2';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -1253,7 +1253,10 @@ window.wizStartRit = async () => {
     go('dash');
   } catch(e) {
     S.saving = false;
-    flash('Fout: '+e.message,'error');
+    // Volledige technische foutmelding (code + naam + message) zodat we
+    // precies kunnen zien wat er misgaat, i.p.v. alleen een korte samenvatting.
+    const detail = [e.code, e.name, e.message].filter(Boolean).join(' | ');
+    flash('Fout bij vertrekken: '+detail,'error');
     render();
   }
 };
