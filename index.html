@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '2.5.2';
+const APP_VERSION = '2.6.0';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -1277,25 +1277,34 @@ window.wizStopRit = async () => {
   try {
     saveAddress(addr);
     saveAddress(ride.start_addr);
+    const finalData = {
+      arrival_time: time,
+      odometer_end: endKm, km_total: endKm - ride.start_km,
+      arrival_address: addr,
+      status: 'open',
+    };
     if (ride._docId) {
-      // Verwijder de 'onderweg' trip en maak nieuwe 'open' trip aan
-      // (vermijdt updateDoc rechten problemen)
-      try { await withTimeout(deleteDoc(doc(db,'trips', ride._docId)), 'Oude rit verwijderen'); } catch(e) {}
+      // Belangrijk: de BESTAANDE rit wordt in-place bijgewerkt (één atomaire
+      // updateDoc), niet meer verwijderd-en-opnieuw-aangemaakt. Bij dat oude
+      // patroon ging een rit soms volledig verloren als de aanmaak-stap na
+      // de verwijder-stap om wat voor reden dan ook mislukte.
+      await withTimeout(updateDoc(doc(db,'trips', ride._docId), finalData), 'Rit opslaan');
+    } else {
+      // Geen bestaand document (onverwachte staat) — dan als vangnet alsnog aanmaken
+      await withTimeout(addDoc(collection(db,'trips'),{
+        vehicle_id: vid, vehicle_license: v?.license||'',
+        user_id: ride.user_id, user_name: ride.user_name,
+        trip_date: ride.trip_date, departure_time: ride.dep_time||'',
+        odometer_start: ride.start_km,
+        departure_address: ride.start_addr||'',
+        purpose: ride.purpose, trip_type: ride.trip_type||'Zakelijk',
+        notes: '', detour: false, detour_reason: '', private_km: 0,
+        created_at: serverTimestamp(),
+        ...finalData,
+      }), 'Rit opslaan');
     }
     // Vergrendeling van het voertuig opheffen zodat een volgende rit gestart kan worden
     try { await withTimeout(updateDoc(doc(db,'vehicles', vid), { active_trip_id: '', active_by: '' }), 'Voertuig vrijgeven'); } catch(e) {}
-    // Maak nieuwe voltooide trip aan
-    await withTimeout(addDoc(collection(db,'trips'),{
-      vehicle_id: vid, vehicle_license: v?.license||'',
-      user_id: ride.user_id, user_name: ride.user_name,
-      trip_date: ride.trip_date, departure_time: ride.dep_time||'',
-      arrival_time: time, odometer_start: ride.start_km,
-      odometer_end: endKm, km_total: endKm - ride.start_km,
-      departure_address: ride.start_addr||'', arrival_address: addr,
-      purpose: ride.purpose, trip_type: ride.trip_type||'Zakelijk',
-      notes: '', detour: false, detour_reason: '', private_km: 0,
-      status: 'open', created_at: serverTimestamp(),
-    }), 'Rit opslaan');
     if (v) { v.last_km=endKm; v.last_addr=addr; v.last_date=ride.trip_date; }
     setVehicleKm(vid, endKm, addr);
     localStorage.setItem('qline_last_addr_' + vid, addr);
@@ -1306,7 +1315,8 @@ window.wizStopRit = async () => {
     go('trips');
   } catch(e) {
     S.saving = false;
-    flash('Fout: '+e.message,'error');
+    const detail = [e.code, e.name, e.message].filter(Boolean).join(' | ');
+    flash('Fout bij opslaan: '+detail,'error');
     render();
   }
 };
