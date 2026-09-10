@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '2.6.1';
+const APP_VERSION = '2.7.0';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -364,6 +364,7 @@ onAuthStateChanged(auth, async u => {
       await loadTrips();
       await loadAR();
       loadVehicleStatus();
+      if (isAdmin()) cleanupSupersededTrips(); // opruimen op de achtergrond, blokkeert niks
     } catch(e) { console.error(e); }
   }
   S.loading = false;
@@ -397,6 +398,30 @@ function loadVehicleStatus() {
     if (lsData && (!v.last_km || lsData.km >= v.last_km)) { v.last_km = lsData.km; v.last_addr = lsData.addr; }
   }
 }
+
+// ── Automatisch opruimen van achtergelaten 0km-placeholders ─────────────────
+// Reguliere gebruikers mogen ritten aanmaken maar niet bijwerken/verwijderen,
+// dus bij het afronden van een rit blijft soms de oude 'onderweg'-placeholder
+// (0 km) achter naast de nieuwe, complete rit. Elke voltooide rit bevat het
+// veld superseded_id met de ID van zo'n eventuele oude placeholder. Zodra een
+// ADMIN de app opent, worden die stille achtergelaten placeholders opgeruimd
+// (admin heeft wél verwijderrechten) — geen handmatig werk meer nodig.
+async function cleanupSupersededTrips() {
+  try {
+    const toClean = S.trips.filter(t => t.superseded_id).map(t => t.superseded_id);
+    if (toClean.length === 0) return;
+    let cleaned = 0;
+    for (const id of toClean) {
+      try { await deleteDoc(doc(db,'trips', id)); cleaned++; } catch(e) { /* al weg of geen rechten — negeren */ }
+    }
+    if (cleaned > 0) {
+      await loadTrips();
+      await loadAR();
+      render();
+    }
+  } catch(e) { /* stille achtergrondtaak, nooit de gebruiker storen */ }
+}
+
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function updateBanner() {
@@ -1287,6 +1312,7 @@ window.wizStopRit = async () => {
       purpose: ride.purpose, trip_type: ride.trip_type||'Zakelijk',
       notes: '', detour: false, detour_reason: '', private_km: 0,
       status: 'open', created_at: serverTimestamp(),
+      superseded_id: ride._docId || null,
     };
     // Belangrijk: eerst de NIEUWE, complete rit aanmaken, en PAS DAARNA de
     // oude 'onderweg'-rit verwijderen (nooit andersom). Firestore-rechten
