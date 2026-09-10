@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '2.6.0';
+const APP_VERSION = '2.6.1';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -1278,30 +1278,28 @@ window.wizStopRit = async () => {
     saveAddress(addr);
     saveAddress(ride.start_addr);
     const finalData = {
-      arrival_time: time,
+      vehicle_id: vid, vehicle_license: v?.license||'',
+      user_id: ride.user_id, user_name: ride.user_name,
+      trip_date: ride.trip_date, departure_time: ride.dep_time||'',
+      arrival_time: time, odometer_start: ride.start_km,
       odometer_end: endKm, km_total: endKm - ride.start_km,
-      arrival_address: addr,
-      status: 'open',
+      departure_address: ride.start_addr||'', arrival_address: addr,
+      purpose: ride.purpose, trip_type: ride.trip_type||'Zakelijk',
+      notes: '', detour: false, detour_reason: '', private_km: 0,
+      status: 'open', created_at: serverTimestamp(),
     };
+    // Belangrijk: eerst de NIEUWE, complete rit aanmaken, en PAS DAARNA de
+    // oude 'onderweg'-rit verwijderen (nooit andersom). Firestore-rechten
+    // staan geen updateDoc op bestaande ritten toe voor reguliere gebruikers
+    // (vandaar aanmaken+verwijderen i.p.v. bijwerken), maar door eerst aan te
+    // maken kan er nooit data verloren gaan als de verwijder-stap faalt —
+    // in het ergste geval blijft er een oude placeholder-rit staan die
+    // handmatig opgeruimd kan worden, maar de echte ritgegevens zijn nooit kwijt.
+    const newRef = await withTimeout(addDoc(collection(db,'trips'), finalData), 'Rit opslaan');
     if (ride._docId) {
-      // Belangrijk: de BESTAANDE rit wordt in-place bijgewerkt (één atomaire
-      // updateDoc), niet meer verwijderd-en-opnieuw-aangemaakt. Bij dat oude
-      // patroon ging een rit soms volledig verloren als de aanmaak-stap na
-      // de verwijder-stap om wat voor reden dan ook mislukte.
-      await withTimeout(updateDoc(doc(db,'trips', ride._docId), finalData), 'Rit opslaan');
-    } else {
-      // Geen bestaand document (onverwachte staat) — dan als vangnet alsnog aanmaken
-      await withTimeout(addDoc(collection(db,'trips'),{
-        vehicle_id: vid, vehicle_license: v?.license||'',
-        user_id: ride.user_id, user_name: ride.user_name,
-        trip_date: ride.trip_date, departure_time: ride.dep_time||'',
-        odometer_start: ride.start_km,
-        departure_address: ride.start_addr||'',
-        purpose: ride.purpose, trip_type: ride.trip_type||'Zakelijk',
-        notes: '', detour: false, detour_reason: '', private_km: 0,
-        created_at: serverTimestamp(),
-        ...finalData,
-      }), 'Rit opslaan');
+      try { await withTimeout(deleteDoc(doc(db,'trips', ride._docId)), 'Oude rit verwijderen'); } catch(e) {
+        console.warn('Oude onderweg-rit kon niet verwijderd worden (nieuwe rit is wel opgeslagen):', e.message);
+      }
     }
     // Vergrendeling van het voertuig opheffen zodat een volgende rit gestart kan worden
     try { await withTimeout(updateDoc(doc(db,'vehicles', vid), { active_trip_id: '', active_by: '' }), 'Voertuig vrijgeven'); } catch(e) {}
