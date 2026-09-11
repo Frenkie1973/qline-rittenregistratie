@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '2.8.0';
+const APP_VERSION = '2.9.0';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -184,11 +184,11 @@ const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 // bereik) een fetch/Firestore-call laat hangen. Na TIMEOUT_MS geeft dit een
 // duidelijke foutmelding i.p.v. eindeloos wachten met een geblokkeerde knop.
 const TIMEOUT_MS = 12000;
-function withTimeout(promise, label='Actie') {
+function withTimeout(promise, label='Actie', ms=TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => {
       reject(new Error(`${label} duurt te lang — controleer je verbinding en probeer opnieuw`));
-    }, TIMEOUT_MS);
+    }, ms);
     promise.then(
       (v) => { clearTimeout(t); resolve(v); },
       (e) => { clearTimeout(t); reject(e); }
@@ -262,7 +262,15 @@ async function saveAR_start(vid, ride) {
     notes: '', detour: false, detour_reason: '', private_km: 0,
     status: 'onderweg', created_at: serverTimestamp()
   };
-  let tripRef = doc(collection(db,'trips'));
+  // ── Voorspelbare (idempotente) document-ID ───────────────────────────────────
+  // Bij een trage/wisselende verbinding (bv. onderweg) kan de app denken dat
+  // een opslag-actie mislukt is (timeout) terwijl die op de achtergrond soms
+  // alsnog aankomt. Door een vaste ID te gebruiken i.p.v. een willekeurige,
+  // overschrijft een herhaalde poging altijd hetzelfde record — er kan dus
+  // nooit een dubbele rit ontstaan, ook niet bij een dubbele klik of een
+  // vertraagde herhaling.
+  const tripId = `${vid}_${ride.trip_date}_${(ride.dep_time||'').replace(/:/g,'')}`;
+  let tripRef = doc(db,'trips', tripId);
   const vehicleRef = doc(db,'vehicles', vid);
   // ── Atomaire vergrendeling (met veilige terugval) ────────────────────────────
   // Voorkomt dat twee mensen vrijwel gelijktijdig dezelfde auto "starten".
@@ -274,20 +282,19 @@ async function saveAR_start(vid, ride) {
     await withTimeout((async () => {
       await runTransaction(db, async (tx) => {
         const vSnap = await tx.get(vehicleRef);
-        if (vSnap.exists() && vSnap.data().active_trip_id) {
+        if (vSnap.exists() && vSnap.data().active_trip_id && vSnap.data().active_trip_id !== tripId) {
           const by = vSnap.data().active_by || 'iemand anders';
           throw new Error(`Dit voertuig is zojuist al gestart door ${by}. Ververs de app (pull-to-refresh) en kies een ander voertuig.`);
         }
         tx.set(tripRef, tripData);
         tx.set(vehicleRef, { active_trip_id: tripRef.id, active_by: ride.user_name, active_since: serverTimestamp() }, { merge: true });
       });
-    })(), 'Rit starten');
+    })(), 'Rit starten', 25000);
   } catch (e) {
     if (e?.message?.includes('is zojuist al gestart door')) throw e; // echte dubbele-boeking-fout: wel tonen
     // Vergrendeling mislukt om andere reden (bv. rechten) — rit alsnog gewoon starten, zonder vergrendeling
     console.warn('Vergrendeling mislukt, rit wordt zonder vergrendeling gestart:', e.message);
-    const ref = await withTimeout(addDoc(collection(db,'trips'), tripData), 'Rit starten (zonder vergrendeling)');
-    tripRef = ref;
+    await withTimeout(setDoc(tripRef, tripData), 'Rit starten (zonder vergrendeling)', 25000);
   }
   ride._docId = tripRef.id;
   S.activeRides[vid] = ride;
@@ -1330,6 +1337,14 @@ window.wizStopRit = async () => {
       status: 'open', created_at: serverTimestamp(),
       superseded_id: ride._docId || null,
     };
+    // ── Voorspelbare (idempotente) document-ID ─────────────────────────────────
+    // Zelfde reden als bij het starten van een rit: bij een trage verbinding
+    // kan een herhaalde poging (door een timeout, of een dubbele klik) anders
+    // een tweede, dubbele "voltooide" rit aanmaken. Met een vaste ID op basis
+    // van de oorspronkelijke onderweg-rit overschrijft een herhaling altijd
+    // hetzelfde record.
+    const doneId = (ride._docId || `${vid}_${ride.trip_date}_${(ride.dep_time||'').replace(/:/g,'')}`) + '_klaar';
+    const doneRef = doc(db,'trips', doneId);
     // Belangrijk: eerst de NIEUWE, complete rit aanmaken, en PAS DAARNA de
     // oude 'onderweg'-rit verwijderen (nooit andersom). Firestore-rechten
     // staan geen updateDoc op bestaande ritten toe voor reguliere gebruikers
@@ -1337,9 +1352,9 @@ window.wizStopRit = async () => {
     // maken kan er nooit data verloren gaan als de verwijder-stap faalt —
     // in het ergste geval blijft er een oude placeholder-rit staan die
     // handmatig opgeruimd kan worden, maar de echte ritgegevens zijn nooit kwijt.
-    const newRef = await withTimeout(addDoc(collection(db,'trips'), finalData), 'Rit opslaan');
+    await withTimeout(setDoc(doneRef, finalData), 'Rit opslaan', 25000);
     if (ride._docId) {
-      try { await withTimeout(deleteDoc(doc(db,'trips', ride._docId)), 'Oude rit verwijderen'); } catch(e) {
+      try { await withTimeout(deleteDoc(doc(db,'trips', ride._docId)), 'Oude rit verwijderen', 25000); } catch(e) {
         console.warn('Oude onderweg-rit kon niet verwijderd worden (nieuwe rit is wel opgeslagen):', e.message);
       }
     }
