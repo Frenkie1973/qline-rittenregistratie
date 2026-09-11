@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '2.7.0';
+const APP_VERSION = '2.8.0';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -402,16 +402,32 @@ function loadVehicleStatus() {
 // ── Automatisch opruimen van achtergelaten 0km-placeholders ─────────────────
 // Reguliere gebruikers mogen ritten aanmaken maar niet bijwerken/verwijderen,
 // dus bij het afronden van een rit blijft soms de oude 'onderweg'-placeholder
-// (0 km) achter naast de nieuwe, complete rit. Elke voltooide rit bevat het
-// veld superseded_id met de ID van zo'n eventuele oude placeholder. Zodra een
-// ADMIN de app opent, worden die stille achtergelaten placeholders opgeruimd
-// (admin heeft wél verwijderrechten) — geen handmatig werk meer nodig.
+// (0 km) achter naast de nieuwe, complete rit. Zodra een ADMIN de app opent,
+// worden die stille achtergelaten placeholders opgeruimd (admin heeft wél
+// verwijderrechten) — geen handmatig werk meer nodig.
 async function cleanupSupersededTrips() {
   try {
-    const toClean = S.trips.filter(t => t.superseded_id).map(t => t.superseded_id);
-    if (toClean.length === 0) return;
+    const idsToClean = new Set();
+    // Methode 1: directe koppeling via superseded_id (voor ritten afgerond
+    // sinds v2.7.0 — de meest betrouwbare match)
+    S.trips.filter(t => t.superseded_id).forEach(t => idsToClean.add(t.superseded_id));
+    // Methode 2: oudere weeskinderen zónder superseded_id (bv. afgerond vlak
+    // vóór v2.7.0) — herkend door een 'onderweg'-rit die exact matcht met een
+    // al voltooide rit op voertuig + gebruiker + datum + vertrektijd.
+    const onderweg = S.trips.filter(t => t.status === 'onderweg');
+    const voltooid = S.trips.filter(t => t.status !== 'onderweg');
+    for (const o of onderweg) {
+      const match = voltooid.find(v =>
+        v.vehicle_id === o.vehicle_id &&
+        v.user_id === o.user_id &&
+        v.trip_date === o.trip_date &&
+        v.departure_time === o.departure_time
+      );
+      if (match) idsToClean.add(o.id);
+    }
+    if (idsToClean.size === 0) return;
     let cleaned = 0;
-    for (const id of toClean) {
+    for (const id of idsToClean) {
       try { await deleteDoc(doc(db,'trips', id)); cleaned++; } catch(e) { /* al weg of geen rechten — negeren */ }
     }
     if (cleaned > 0) {
@@ -1665,6 +1681,13 @@ window.saveManualTrip = async () => {
 function renderAdminActive() {
   const actief = Object.entries(S.activeRides);
   return `
+<div class="card" style="margin-bottom:16px">
+  <div class="ch">🧹 Weeskind-ritten opruimen</div>
+  <div style="padding:14px 16px">
+    <p style="font-size:13px;color:#666;margin-bottom:10px">Zoekt en verwijdert oude 'onderweg'-placeholders (0 km) die zijn achtergebleven naast een al voltooide rit. Draait ook automatisch elke keer dat je inlogt.</p>
+    <button class="btn bp bsm" onclick="cleanupSupersededTrips().then(()=>flash('Opruiming uitgevoerd'))">Opruimen nu</button>
+  </div>
+</div>
 <div class="card" style="margin-bottom:16px">
   <div class="ch">🔧 Doel bulk-wijzigen</div>
   <div style="padding:14px 16px">
