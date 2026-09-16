@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '2.9.0';
+const APP_VERSION = '2.9.1';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -1284,13 +1284,21 @@ window.wizStartRit = async () => {
   if (!vid || !km || !purpose) { flash('Vul alle velden in','error'); S.saving=false; render(); return; }
   try {
     setLastVehicle(vid);
+    // Vertrektijd/-datum ÉÉN keer vastleggen voor deze wizard-sessie (niet bij
+    // elke poging opnieuw berekenen). Anders zou een herhaalde poging — bv.
+    // na een timeout op een trage verbinding, terwijl de eerste poging op de
+    // achtergrond soms toch al gelukt was — een ANDER tijdstip krijgen en
+    // daardoor alsnog een tweede, dubbele rit aanmaken i.p.v. hetzelfde
+    // record te overschrijven (idempotentie werkt alleen als dep_time gelijk
+    // blijft tussen pogingen).
+    if (!S.wiz.dep_time) { S.wiz.dep_time = nowTime(); S.wiz.trip_date = nowDate(); }
     const ride = {
       vehicle_id: vid,
       start_km: parseInt(km),
       start_addr: addr||'',
       purpose, trip_type: tripType,
-      dep_time: nowTime(),
-      trip_date: nowDate(),
+      dep_time: S.wiz.dep_time,
+      trip_date: S.wiz.trip_date,
       user_id: S.user.uid,
       user_name: S.profile?.full_name||S.user.email,
       created_at: serverTimestamp(),
