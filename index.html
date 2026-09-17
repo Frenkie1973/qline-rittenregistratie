@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '2.9.1';
+const APP_VERSION = '3.0.0';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -178,6 +178,10 @@ const nowDate = () => { const d=new Date(); return d.getFullYear()+'-'+pad(d.get
 window.nowDate = nowDate;
 window.nowTime = nowTime;
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+// Effectieve status voor weergave: een rit met arrival_reported heeft al alle
+// echte gegevens, maar staat door Firestore-rechten technisch nog even op
+// 'onderweg' totdat admin 'm promoveert. Toon 'm alvast als 'open'.
+const displayStatus = t => t.arrival_reported ? 'open' : (t.status||'open');
 
 // ── Timeout-wrapper ──────────────────────────────────────────────────────────
 // Voorkomt dat de app "bevriest" wanneer een netwerkverbinding (mobiel, slecht
@@ -218,8 +222,10 @@ async function loadAR() {
   // Iedereen heeft leesrechten op trips want die worden sowieso al geladen
   S.activeRides = {};
   try {
-    // Gebruik al geladen trips als die er zijn
-    const onderweg = S.trips.filter(t => t.status === 'onderweg');
+    // Gebruik al geladen trips als die er zijn. Ritten die al een aankomst
+    // hebben gerapporteerd (arrival_reported) tellen niet meer mee als
+    // "onderweg" — die wachten alleen nog op de automatische admin-promotie.
+    const onderweg = S.trips.filter(t => t.status === 'onderweg' && !t.arrival_reported);
     onderweg.forEach(t => {
       S.activeRides[t.vehicle_id] = {
         vehicle_id: t.vehicle_id,
@@ -406,23 +412,34 @@ function loadVehicleStatus() {
   }
 }
 
-// ── Automatisch opruimen van achtergelaten 0km-placeholders ─────────────────
-// Reguliere gebruikers mogen ritten aanmaken maar niet bijwerken/verwijderen,
-// dus bij het afronden van een rit blijft soms de oude 'onderweg'-placeholder
-// (0 km) achter naast de nieuwe, complete rit. Zodra een ADMIN de app opent,
-// worden die stille achtergelaten placeholders opgeruimd (admin heeft wél
-// verwijderrechten) — geen handmatig werk meer nodig.
+// ── Automatisch opruimen/promoveren (admin-only achtergrondtaak) ───────────
+// Reguliere gebruikers mogen in Firestore alleen NIEUWE ritten aanmaken met
+// status 'onderweg' — niet bijwerken, niet verwijderen, en ook niet direct
+// een rit met status 'open' aanmaken. Daarom slaat de app een afgeronde rit
+// tijdelijk op als status 'onderweg' + arrival_reported:true (met de échte
+// eindgegevens erin). Zodra een ADMIN de app opent, promoveert deze functie
+// zulke ritten naar status 'open' (admin heeft wél update-rechten) en ruimt
+// de oorspronkelijke onderweg-placeholder op — geen handmatig werk nodig.
 async function cleanupSupersededTrips() {
   try {
+    let changed = 0;
+    // Stap 1: gerapporteerde aankomsten promoveren naar status 'open'
+    const pending = S.trips.filter(t => t.arrival_reported && t.status === 'onderweg');
+    for (const t of pending) {
+      try {
+        await updateDoc(doc(db,'trips', t.id), { status: 'open' });
+        changed++;
+      } catch(e) { /* geen rechten of al gepromoveerd — negeren */ }
+    }
+    // Stap 2: oude placeholders opruimen
     const idsToClean = new Set();
-    // Methode 1: directe koppeling via superseded_id (voor ritten afgerond
-    // sinds v2.7.0 — de meest betrouwbare match)
+    // Methode 1: directe koppeling via superseded_id
     S.trips.filter(t => t.superseded_id).forEach(t => idsToClean.add(t.superseded_id));
-    // Methode 2: oudere weeskinderen zónder superseded_id (bv. afgerond vlak
-    // vóór v2.7.0) — herkend door een 'onderweg'-rit die exact matcht met een
-    // al voltooide rit op voertuig + gebruiker + datum + vertrektijd.
-    const onderweg = S.trips.filter(t => t.status === 'onderweg');
-    const voltooid = S.trips.filter(t => t.status !== 'onderweg');
+    // Methode 2: oudere weeskinderen zónder superseded_id — herkend door een
+    // 'onderweg'-rit (zonder arrival_reported) die exact matcht met een al
+    // voltooide rit op voertuig + gebruiker + datum + vertrektijd.
+    const onderweg = S.trips.filter(t => t.status === 'onderweg' && !t.arrival_reported);
+    const voltooid = S.trips.filter(t => t.status !== 'onderweg' || t.arrival_reported);
     for (const o of onderweg) {
       const match = voltooid.find(v =>
         v.vehicle_id === o.vehicle_id &&
@@ -432,12 +449,10 @@ async function cleanupSupersededTrips() {
       );
       if (match) idsToClean.add(o.id);
     }
-    if (idsToClean.size === 0) return;
-    let cleaned = 0;
     for (const id of idsToClean) {
-      try { await deleteDoc(doc(db,'trips', id)); cleaned++; } catch(e) { /* al weg of geen rechten — negeren */ }
+      try { await deleteDoc(doc(db,'trips', id)); changed++; } catch(e) { /* al weg of geen rechten — negeren */ }
     }
-    if (cleaned > 0) {
+    if (changed > 0) {
       await loadTrips();
       await loadAR();
       render();
@@ -506,12 +521,12 @@ function renderDash() {
   const tot = mt.reduce((s,t)=>s+(t.km_total||0),0);
   const zak = mt.filter(t=>t.trip_type==='Zakelijk').reduce((s,t)=>s+(t.km_total||0),0);
   const pri = mt.filter(t=>t.trip_type==='Privé').reduce((s,t)=>s+(t.km_total||0),0);
-  const open = mt.filter(t=>t.status==='open').length;
+  const open = mt.filter(t=>displayStatus(t)==='open').length;
   const actCnt = Object.keys(S.activeRides).length;
   const pvmap = {};
   mt.forEach(t=>{ const k=t.vehicle_license||'?'; pvmap[k]=(pvmap[k]||0)+(t.km_total||0); });
   const pvArr = Object.entries(pvmap).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  const openList = S.trips.filter(t=>t.status==='open').slice(0,5);
+  const openList = S.trips.filter(t=>displayStatus(t)==='open').slice(0,5);
   const hr = new Date().getHours();
   const groet = hr < 12 ? 'Goedemorgen' : hr < 18 ? 'Goedemiddag' : 'Goedenavond';
   return `
@@ -586,7 +601,7 @@ ${(() => {
         </div>
         <div style="text-align:right;flex-shrink:0">
           <div style="font-size:18px;font-weight:700;color:#27ae60">${t.km_total||0} km</div>
-          <span style="display:inline-block;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600;${bmap[t.status]||bmap.open}">${t.status||'open'}</span>
+          <span style="display:inline-block;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600;${bmap[displayStatus(t)]||bmap.open}">${displayStatus(t)}</span>
         </div>
       </div>
     </div>`;
@@ -1333,6 +1348,16 @@ window.wizStopRit = async () => {
   try {
     saveAddress(addr);
     saveAddress(ride.start_addr);
+    // ── Belangrijke ontdekking ────────────────────────────────────────────────
+    // Reguliere gebruikers mogen in Firestore ALLEEN nieuwe ritten aanmaken met
+    // status 'onderweg' — direct een rit met status 'open' aanmaken (of een
+    // bestaande rit bijwerken/verwijderen) wordt geweigerd. Daarom wordt de
+    // aankomst nu opgeslagen als een NIEUW record met status 'onderweg' plus
+    // een markering 'arrival_reported: true' en de echte eindgegevens erbij.
+    // Dat record wordt door de app lokaal al als "afgerond" behandeld (zie
+    // loadAR), en zodra een ADMIN inlogt, promoveert cleanupSupersededTrips()
+    // het automatisch naar status 'open' en ruimt de oude placeholder op —
+    // die stappen mag admin namelijk wel.
     const finalData = {
       vehicle_id: vid, vehicle_license: v?.license||'',
       user_id: ride.user_id, user_name: ride.user_name,
@@ -1342,31 +1367,20 @@ window.wizStopRit = async () => {
       departure_address: ride.start_addr||'', arrival_address: addr,
       purpose: ride.purpose, trip_type: ride.trip_type||'Zakelijk',
       notes: '', detour: false, detour_reason: '', private_km: 0,
-      status: 'open', created_at: serverTimestamp(),
+      status: 'onderweg', arrival_reported: true, created_at: serverTimestamp(),
       superseded_id: ride._docId || null,
     };
     // ── Voorspelbare (idempotente) document-ID ─────────────────────────────────
-    // Zelfde reden als bij het starten van een rit: bij een trage verbinding
-    // kan een herhaalde poging (door een timeout, of een dubbele klik) anders
-    // een tweede, dubbele "voltooide" rit aanmaken. Met een vaste ID op basis
-    // van de oorspronkelijke onderweg-rit overschrijft een herhaling altijd
+    // Bij een trage verbinding kan een herhaalde poging (na een timeout)
+    // anders een tweede, dubbele rit aanmaken. Met een vaste ID op basis van
+    // de oorspronkelijke onderweg-rit overschrijft een herhaling altijd
     // hetzelfde record.
     const doneId = (ride._docId || `${vid}_${ride.trip_date}_${(ride.dep_time||'').replace(/:/g,'')}`) + '_klaar';
     const doneRef = doc(db,'trips', doneId);
-    // Belangrijk: eerst de NIEUWE, complete rit aanmaken, en PAS DAARNA de
-    // oude 'onderweg'-rit verwijderen (nooit andersom). Firestore-rechten
-    // staan geen updateDoc op bestaande ritten toe voor reguliere gebruikers
-    // (vandaar aanmaken+verwijderen i.p.v. bijwerken), maar door eerst aan te
-    // maken kan er nooit data verloren gaan als de verwijder-stap faalt —
-    // in het ergste geval blijft er een oude placeholder-rit staan die
-    // handmatig opgeruimd kan worden, maar de echte ritgegevens zijn nooit kwijt.
     await withTimeout(setDoc(doneRef, finalData), 'Rit opslaan', 25000);
-    if (ride._docId) {
-      try { await withTimeout(deleteDoc(doc(db,'trips', ride._docId)), 'Oude rit verwijderen', 25000); } catch(e) {
-        console.warn('Oude onderweg-rit kon niet verwijderd worden (nieuwe rit is wel opgeslagen):', e.message);
-      }
-    }
-    // Vergrendeling van het voertuig opheffen zodat een volgende rit gestart kan worden
+    // Vergrendeling van het voertuig opheffen (best effort — mag mogelijk niet
+    // voor reguliere gebruikers, maar de vehicle-lock heeft toch al een
+    // automatische verval-termijn als vangnet)
     try { await withTimeout(updateDoc(doc(db,'vehicles', vid), { active_trip_id: '', active_by: '' }), 'Voertuig vrijgeven'); } catch(e) {}
     if (v) { v.last_km=endKm; v.last_addr=addr; v.last_date=ride.trip_date; }
     setVehicleKm(vid, endKm, addr);
@@ -1420,7 +1434,7 @@ function filteredTrips() {
     if (S.ff.from && t.trip_date < S.ff.from) return false;
     if (S.ff.to   && t.trip_date > S.ff.to)   return false;
     if (S.ff.type && t.trip_type !== S.ff.type) return false;
-    if (S.ff.status && t.status !== S.ff.status) return false;
+    if (S.ff.status && displayStatus(t) !== S.ff.status) return false;
     if (S.ff.search) {
       const s = S.ff.search.toLowerCase();
       if (!(t.purpose||'').toLowerCase().includes(s) &&
@@ -1477,7 +1491,7 @@ function renderTrips() {
 function tripRow(t, showApprove) {
   const bmap = {open:'background:#fef3cd;color:#856404',goedgekeurd:'background:#d1e7dd;color:#0a3622',afgekeurd:'background:#f8d7da;color:#721c24'};
   const tmap = {Zakelijk:'background:#cfe2ff;color:#084298',Privé:'background:#e8d5f5;color:#4a1a6e'};
-  const bs = bmap[t.status]||bmap.open;
+  const bs = bmap[displayStatus(t)]||bmap.open;
   const ts = tmap[t.trip_type]||'';
   return `<div class="tri" onclick="go('detail',{detailTrip:S.trips.find(x=>x.id==='${t.id}')})">
   <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
@@ -1487,7 +1501,7 @@ function tripRow(t, showApprove) {
         <span style="font-family:monospace;font-size:12px;color:#888">${esc(t.vehicle_license||'')}</span>
         ${isAdmin()?`<span style="font-size:12px;color:#888">${esc(t.user_name||'')}</span>`:''}
         ${ts?`<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;${ts}">${esc(t.trip_type)}</span>`:''}
-        <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;${bs}">${t.status||'open'}</span>
+        <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;${bs}">${displayStatus(t)}</span>
       </div>
       <div style="font-size:13px;color:#555;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px">${esc(t.departure_address||'')} → ${esc(t.arrival_address||'')}</div>
       <div style="font-size:12px;color:#aaa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px">${esc(t.purpose||'')}</div>
@@ -1495,7 +1509,7 @@ function tripRow(t, showApprove) {
     <div style="text-align:right;flex-shrink:0">
       <div style="font-size:20px;font-weight:700;color:var(--red)">${t.km_total||0} km</div>
       <div style="display:flex;gap:3px;margin-top:4px;justify-content:flex-end">
-        ${isAdmin()&&t.status==='open'?`
+        ${isAdmin()&&displayStatus(t)==='open'?`
           <button class="btn bsu bsm" onclick="event.stopPropagation();approve('${t.id}','goedgekeurd')">✓</button>
           <button class="btn bd bsm" onclick="event.stopPropagation();approve('${t.id}','afgekeurd')">✗</button>`:''}
         ${isAdmin()?`<button class="btn bsm" onclick="event.stopPropagation();deleteTrip('${t.id}')" style="background:#888;color:#fff;border:none;border-radius:6px;cursor:pointer">🗑</button>`:''}
@@ -1522,7 +1536,7 @@ function renderDetail() {
 <div class="ph">
   <div><div class="pt">Ritdetails</div></div>
   <div style="display:flex;gap:6px;flex-wrap:wrap">
-    ${isAdmin()&&t.status==='open'?`
+    ${isAdmin()&&displayStatus(t)==='open'?`
       <button class="btn bsu bsm" onclick="approve('${t.id}','goedgekeurd')">✓ Goed</button>
       <button class="btn bd bsm" onclick="approve('${t.id}','afgekeurd')">✗ Af</button>`:''}
     ${isAdmin()?`<button class="btn bd bsm" onclick="deleteTrip('${t.id}')" style="background:#888">🗑 Verwijder</button>`:''}
@@ -1546,7 +1560,7 @@ function renderAdmin() {
   <button class="tb ${S.adminTab==='users'?'on':''}" onclick="setAdminTab('users')">👥 Gebruikers</button>
   <button class="tb ${S.adminTab==='active'?'on':''}" onclick="setAdminTab('active')" style="${actCnt>0?'color:var(--red);font-weight:700':''}">⚠️ Actief (${actCnt})</button>
   <button class="tb ${S.adminTab==='manual'?'on':''}" onclick="setAdminTab('manual')">➕ Handmatig</button>
-  <button class="tb ${S.adminTab==='approve'?'on':''}" onclick="setAdminTab('approve')">✅ Goed (${S.trips.filter(t=>t.status==='open').length})</button>
+  <button class="tb ${S.adminTab==='approve'?'on':''}" onclick="setAdminTab('approve')">✅ Goed (${S.trips.filter(t=>displayStatus(t)==='open').length})</button>
 </div>
 ${S.adminTab==='vehicles'?renderAdminVehicles():S.adminTab==='users'?renderAdminUsers():S.adminTab==='active'?renderAdminActive():S.adminTab==='manual'?renderAdminManual():renderAdminApprove()}`;
 }
@@ -1821,7 +1835,7 @@ function renderAdminUsers() {
 }
 
 function renderAdminApprove() {
-  const open = S.trips.filter(t=>t.status==='open');
+  const open = S.trips.filter(t=>displayStatus(t)==='open');
   return `
 <div class="card">
   <div class="ch">Openstaand (${open.length})</div>
@@ -2033,9 +2047,17 @@ window.resetAlleRitten = async () => {
   for (const v of S.vehicles) {
     try { await updateDoc(doc(db,'vehicles', v.id), { active_trip_id: '', active_by: '' }); } catch(e) {}
   }
-  // Onderweg-trips verwijderen (dit zijn de "vastgelopen" ritten)
+  // Eerst gerapporteerde aankomsten promoveren en placeholders opruimen —
+  // NOOIT direct alle 'onderweg'-ritten verwijderen, want daar zitten ook
+  // al-gerapporteerde ritten tussen met echte (nog niet gepromoveerde) km-data.
+  await cleanupSupersededTrips();
+  // Wat nu nog als 'onderweg' overblijft, is écht vastgelopen (geen
+  // arrival_reported) — dát mag wel veilig verwijderd worden.
   const onderwegSnap = await getDocs(query(collection(db,'trips'), where('status','==','onderweg')));
-  for (const d of onderwegSnap.docs) await deleteDoc(doc(db,'trips',d.id));
+  for (const d of onderwegSnap.docs) {
+    if (d.data().arrival_reported) continue; // extra vangnet, nooit deze verwijderen
+    await deleteDoc(doc(db,'trips',d.id));
+  }
   S.activeRides = {};
   await loadTrips();
   flash('Alle actieve ritten gereset'); go('dash');
