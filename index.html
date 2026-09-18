@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '3.0.1';
+const APP_VERSION = '3.0.2';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -181,7 +181,7 @@ const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 // Effectieve status voor weergave: een rit met arrival_reported heeft al alle
 // echte gegevens, maar staat door Firestore-rechten technisch nog even op
 // 'onderweg' totdat admin 'm promoveert. Toon 'm alvast als 'open'.
-const displayStatus = t => t.arrival_reported ? 'open' : (t.status||'open');
+const displayStatus = t => (t.arrival_reported && t.status === 'onderweg') ? 'open' : (t.status||'open');
 
 // ── Timeout-wrapper ──────────────────────────────────────────────────────────
 // Voorkomt dat de app "bevriest" wanneer een netwerkverbinding (mobiel, slecht
