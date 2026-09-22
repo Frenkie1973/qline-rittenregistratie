@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '3.0.2';
+const APP_VERSION = '3.1.0';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -361,6 +361,12 @@ setInterval(checkForUpdate, 4 * 60 * 1000); // elke 4 minuten
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
 window.addEventListener('focus', checkForUpdate);
 window.doForceUpdate = () => { location.reload(); };
+
+// Opruiming van weeskind-placeholders periodiek herhalen voor admin-sessies
+// die de hele dag open blijven staan — niet alleen bij het inloggen, anders
+// hopen nieuwe weeskinderen zich op totdat er opnieuw wordt ingelogd.
+setInterval(() => { if (isAdmin() && S.user) cleanupSupersededTrips(); }, 5 * 60 * 1000); // elke 5 minuten
+document.addEventListener('visibilitychange', () => { if (!document.hidden && isAdmin() && S.user) cleanupSupersededTrips(); });
 
 const authTO = setTimeout(() => { if(S.loading){S.loading=false;render();} }, 8000);
 onAuthStateChanged(auth, async u => {
