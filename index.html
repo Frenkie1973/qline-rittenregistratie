@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '3.1.0';
+const APP_VERSION = '3.2.0';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -367,6 +367,22 @@ window.doForceUpdate = () => { location.reload(); };
 // hopen nieuwe weeskinderen zich op totdat er opnieuw wordt ingelogd.
 setInterval(() => { if (isAdmin() && S.user) cleanupSupersededTrips(); }, 5 * 60 * 1000); // elke 5 minuten
 document.addEventListener('visibilitychange', () => { if (!document.hidden && isAdmin() && S.user) cleanupSupersededTrips(); });
+
+// ── Verse rit-data periodiek herladen (alle gebruikers) ──────────────────────
+// Zonder dit blijft de "Onderweg"-widget op het dashboard tonen wat er lokaal
+// in het geheugen stond op het moment dat de pagina voor het laatst een
+// rit startte/afrondde. Bij een tab die de hele dag openstaat kan dit gaan
+// afwijken van de werkelijke, actuele status in Firestore (bv. een al lang
+// afgeronde rit die toch nog als "onderweg" getoond blijft). Door periodiek
+// en bij terugkeer naar het tabblad opnieuw te laden, herstelt dit zichzelf
+// altijd binnen enkele minuten, ongeacht hoe lang de app al open staat.
+async function refreshRideData() {
+  if (!S.user) return;
+  try { await loadTrips(); await loadAR(); loadVehicleStatus(); render(); } catch(e) { /* volgende poging probeert opnieuw */ }
+}
+setInterval(refreshRideData, 3 * 60 * 1000); // elke 3 minuten
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshRideData(); });
+window.addEventListener('focus', refreshRideData);
 
 const authTO = setTimeout(() => { if(S.loading){S.loading=false;render();} }, 8000);
 onAuthStateChanged(auth, async u => {
