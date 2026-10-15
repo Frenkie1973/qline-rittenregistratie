@@ -145,7 +145,13 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '3.5.0';
+const APP_VERSION = '3.5.1';
+// Voertuig-vergrendeling (wie rijdt er nu met de auto) vervalt na 6 uur, of direct
+// als er geen tijdstip bij staat. Zo kan een vastgelopen vergrendeling (bv. een
+// rit die later is verwijderd) nooit meer iemand blokkeren. Wordt zowel in de
+// keuzelijst als bij het echt starten van een rit gebruikt (eerder alleen in de lijst).
+const LOCK_VERLOOP_MS = 6 * 60 * 60 * 1000;
+const lockIsStale = (since) => !since || !since.toMillis || (Date.now() - since.toMillis()) > LOCK_VERLOOP_MS;
 // Telefoon? Dan laden we minder ritten (sneller). Computers en tablets laden alles.
 const IS_PHONE = /Android.*Mobile|iPhone|iPod/i.test(navigator.userAgent) ||
   (matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600);
@@ -292,8 +298,9 @@ async function saveAR_start(vid, ride) {
     await withTimeout((async () => {
       await runTransaction(db, async (tx) => {
         const vSnap = await tx.get(vehicleRef);
-        if (vSnap.exists() && vSnap.data().active_trip_id && vSnap.data().active_trip_id !== tripId) {
-          const by = vSnap.data().active_by || 'iemand anders';
+        const lockData = vSnap.exists() ? vSnap.data() : {};
+        if (lockData.active_trip_id && lockData.active_trip_id !== tripId && !lockIsStale(lockData.active_since)) {
+          const by = lockData.active_by || 'iemand anders';
           throw new Error(`Dit voertuig is zojuist al gestart door ${by}. Ververs de app (pull-to-refresh) en kies een ander voertuig.`);
         }
         tx.set(tripRef, tripData);
@@ -805,9 +812,7 @@ function renderWizRijden() {
       // onjuist beeld. Een vergrendeling die langer dan 6 uur oud is wordt
       // als vastgelopen beschouwd en telt niet meer mee (zelfherstel, zodat
       // niemand handmatig "Reset alles" hoeft te gebruiken bij een hangende rit).
-      const lockAgeMs = v.active_since?.toMillis ? (Date.now() - v.active_since.toMillis()) : 0;
-      const lockStale = lockAgeMs > 6 * 60 * 60 * 1000;
-      const inUse = !!v.active_trip_id && !lockStale;
+      const inUse = !!v.active_trip_id && !lockIsStale(v.active_since);
       const sel = S.wiz.vid === v.id;
       const km = v.last_km ? v.last_km + ' km' : 'geen stand bekend';
       return `<div class="wiz-vehicle-card ${sel?'selected':''} ${inUse?'inuse':''}"
@@ -922,7 +927,7 @@ ${S.wiz.addr?'':suggestions}
     const v = S.vehicles.find(x => x.id === S.wiz.vid);
     const canConfirm = S.wiz.purpose && S.wiz.tripType;
     content = `
-<div class="wiz-label">Stap 4 van ${totalSteps}</div>
+<div class="wiz-label">Stap ${displayStep} van ${totalSteps}</div>
 <div class="wiz-question">Wat is het doel van de rit?</div>
 <div style="display:flex;gap:8px;margin-bottom:20px">
   <input class="wiz-input-std" type="text" id="wiz-purpose" value="${esc(S.wiz.purpose)}"
