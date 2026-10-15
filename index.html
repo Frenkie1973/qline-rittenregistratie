@@ -145,7 +145,11 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '3.4.0';
+const APP_VERSION = '3.5.0';
+// Telefoon? Dan laden we minder ritten (sneller). Computers en tablets laden alles.
+const IS_PHONE = /Android.*Mobile|iPhone|iPod/i.test(navigator.userAgent) ||
+  (matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600);
+const PHONE_DAGEN = 60; // op de telefoon: alleen de laatste 60 dagen
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -429,9 +433,18 @@ async function loadTrips(mode='full') {
     S.trips = [...fresh, ...older];
     return;
   }
-  const q = admin
-    ? query(collection(db,'trips'), orderBy('trip_date','desc'), limit(3000))
-    : query(collection(db,'trips'), where('user_id','==',S.user.uid), orderBy('trip_date','desc'), limit(1000));
+  let q;
+  if (IS_PHONE) {
+    const d = new Date(); d.setDate(d.getDate() - PHONE_DAGEN);
+    const cutoff = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    q = admin
+      ? query(collection(db,'trips'), where('trip_date','>=',cutoff), orderBy('trip_date','desc'))
+      : query(collection(db,'trips'), where('user_id','==',S.user.uid), where('trip_date','>=',cutoff), orderBy('trip_date','desc'));
+  } else {
+    q = admin
+      ? query(collection(db,'trips'), orderBy('trip_date','desc'), limit(3000))
+      : query(collection(db,'trips'), where('user_id','==',S.user.uid), orderBy('trip_date','desc'), limit(1000));
+  }
   const snap = await getDocs(q);
   S.trips = snap.docs.map(d => ({id:d.id,...d.data()}));
   S._tripsFull = true;
@@ -500,6 +513,7 @@ async function syncVehicleKm(vid, km, addr, date) {
 // op het voertuig-document. Dit is de zelfherstellende bron van waarheid.
 async function reconcileVehicleKm(force=false) {
   if (!S.user || !isAdmin()) return 0;
+  if (IS_PHONE && !force) return 0; // leest alle ritten van elk voertuig: op de telefoon overslaan, de computer doet dit
   const now = Date.now();
   if (!force && S._lastKmReconcile && now - S._lastKmReconcile < 10*60*1000) return 0;
   S._lastKmReconcile = now;
@@ -1608,6 +1622,7 @@ function renderTrips() {
 <div class="card">
   ${trips.length===0?'<div class="empty"><div class="ei">🔍</div><p>Geen ritten gevonden</p></div>':''}
   ${trips.map(t=>tripRow(t,true)).join('')}
+  ${IS_PHONE?`<div style="padding:14px 16px;font-size:12px;color:#888;text-align:center">Op de telefoon zie je de laatste ${PHONE_DAGEN} dagen. Open de app op de computer voor alle ritten.</div>`:''}
 </div>`;
 }
 
