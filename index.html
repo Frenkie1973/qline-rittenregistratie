@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '3.2.0';
+const APP_VERSION = '3.3.0';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -365,8 +365,8 @@ window.doForceUpdate = () => { location.reload(); };
 // Opruiming van weeskind-placeholders periodiek herhalen voor admin-sessies
 // die de hele dag open blijven staan — niet alleen bij het inloggen, anders
 // hopen nieuwe weeskinderen zich op totdat er opnieuw wordt ingelogd.
-setInterval(() => { if (isAdmin() && S.user) cleanupSupersededTrips(); }, 5 * 60 * 1000); // elke 5 minuten
-document.addEventListener('visibilitychange', () => { if (!document.hidden && isAdmin() && S.user) cleanupSupersededTrips(); });
+setInterval(() => { if (isAdmin() && S.user) cleanupSupersededTrips().then(() => reconcileVehicleKm()); }, 5 * 60 * 1000); // elke 5 minuten
+document.addEventListener('visibilitychange', () => { if (!document.hidden && isAdmin() && S.user) cleanupSupersededTrips().then(() => reconcileVehicleKm()); });
 
 // ── Verse rit-data periodiek herladen (alle gebruikers) ──────────────────────
 // Zonder dit blijft de "Onderweg"-widget op het dashboard tonen wat er lokaal
@@ -378,7 +378,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && is
 // altijd binnen enkele minuten, ongeacht hoe lang de app al open staat.
 async function refreshRideData() {
   if (!S.user) return;
-  try { await loadTrips(); await loadAR(); loadVehicleStatus(); render(); } catch(e) { /* volgende poging probeert opnieuw */ }
+  try { await loadVehicles(); await loadTrips(); await loadAR(); loadVehicleStatus(); render(); } catch(e) { /* volgende poging probeert opnieuw */ }
 }
 setInterval(refreshRideData, 3 * 60 * 1000); // elke 3 minuten
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshRideData(); });
@@ -399,7 +399,7 @@ onAuthStateChanged(auth, async u => {
       await loadTrips();
       await loadAR();
       loadVehicleStatus();
-      if (isAdmin()) cleanupSupersededTrips(); // opruimen op de achtergrond, blokkeert niks
+      if (isAdmin()) cleanupSupersededTrips().then(() => reconcileVehicleKm(true)); // achtergrondtaken, blokkeren niks
     } catch(e) { console.error(e); }
   }
   S.loading = false;
@@ -417,22 +417,89 @@ async function loadTrips() {
 async function loadVehicles() {
   const snap = await getDocs(query(collection(db,'vehicles'), orderBy('license')));
   S.vehicles = snap.docs.map(d => ({id:d.id,...d.data()})).filter(v => v.active!==false);
+  // Gedeelde km-stand uit het voertuig-document zelf (voor iedereen leesbaar)
+  S.vehicles.forEach(v => { v._docKm = Number(v.last_km)||0; v._docAddr = v.last_addr||''; v._docDate = v.last_date||''; });
 }
 async function loadUsers() {
   const snap = await getDocs(collection(db,'users'));
   S.users = snap.docs.map(d => ({id:d.id,...d.data()}));
 }
+// ── Kilometerstand per voertuig: één bron van waarheid ───────────────────────
+// De keten hoort aan het VOERTUIG te hangen, niet aan de bestuurder of telefoon.
+// Bron 1 (gedeeld): last_km op het voertuig-document, voor iedereen leesbaar.
+// Bron 2: de hoogste eindstand in de ritten die deze gebruiker kan zien.
+// Altijd wint de HOOGSTE stand (een kilometerteller loopt alleen op). De oude
+// telefoon-eigen localStorage-waarde telt alleen nog mee als er verder niets is,
+// anders kreeg elke telefoon een eigen, afwijkende stand.
+function kmFromTrips(trips, vid) {
+  let best = null;
+  for (const t of trips) {
+    if (t.vehicle_id !== vid || t.status === 'afgekeurd') continue;
+    const km = Number(t.odometer_end)||0;
+    if (km <= 0) continue; // 'onderweg'-placeholders hebben eind 0
+    if (!best || km > best.km || (km === best.km && (t.trip_date||'') > (best.date||''))) {
+      best = { km, addr: t.arrival_address||'', date: t.trip_date||'' };
+    }
+  }
+  return best;
+}
 function loadVehicleStatus() {
   for (const v of S.vehicles) {
-    const vTrips = S.trips.filter(t => t.vehicle_id === v.id && t.odometer_end);
-    if (vTrips.length > 0) {
-      const last = vTrips.sort((a,b) => (b.trip_date||'').localeCompare(a.trip_date||''))[0];
-      v.last_km = last.odometer_end; v.last_addr = last.arrival_address; v.last_date = last.trip_date;
+    let best = v._docKm > 0 ? { km: v._docKm, addr: v._docAddr, date: v._docDate } : null;
+    const fromTrips = kmFromTrips(S.trips, v.id);
+    if (fromTrips && (!best || fromTrips.km > best.km)) best = fromTrips;
+    if (!best) {
+      const ls = getVehicleKm(v.id);
+      if (ls) best = { km: Number(ls.km)||0, addr: ls.addr||'', date: ls.date||'' };
     }
-    const lsData = getVehicleKm(v.id);
-    if (lsData && (!v.last_km || lsData.km >= v.last_km)) { v.last_km = lsData.km; v.last_addr = lsData.addr; }
+    if (best && best.km > 0) { v.last_km = best.km; v.last_addr = best.addr||''; v.last_date = best.date||''; }
   }
 }
+
+// Monteur-kant: deel de nieuwe stand via het voertuig-document (alleen omhoog).
+// Best effort: als schrijfrechten ontbreken gebeurt er niets en neemt de
+// admin-synchronisatie het over.
+async function syncVehicleKm(vid, km, addr, date) {
+  try {
+    const ref = doc(db,'vehicles', vid);
+    await withTimeout(runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref);
+      const cur = snap.exists() ? (Number(snap.data().last_km)||0) : 0;
+      if (km > cur) tx.set(ref, { last_km: km, last_addr: addr||'', last_date: date||'' }, { merge: true });
+    }), 'Km-stand delen', 15000);
+    return true;
+  } catch(e) {
+    console.warn('Km-stand delen mislukt (geen rechten?):', e.code||e.message);
+    return false;
+  }
+}
+
+// Admin-kant: herbereken per voertuig de échte stand uit ALLE ritten en zet die
+// op het voertuig-document. Dit is de zelfherstellende bron van waarheid.
+async function reconcileVehicleKm(force=false) {
+  if (!S.user || !isAdmin()) return 0;
+  const now = Date.now();
+  if (!force && S._lastKmReconcile && now - S._lastKmReconcile < 10*60*1000) return 0;
+  S._lastKmReconcile = now;
+  let changed = 0;
+  for (const v of S.vehicles) {
+    try {
+      const snap = await getDocs(query(collection(db,'trips'), where('vehicle_id','==',v.id)));
+      const best = kmFromTrips(snap.docs.map(d => ({id:d.id,...d.data()})), v.id);
+      if (!best) continue;
+      if (best.km !== v._docKm || (best.addr||'') !== (v._docAddr||'')) {
+        await updateDoc(doc(db,'vehicles', v.id), { last_km: best.km, last_addr: best.addr||'', last_date: best.date||'' });
+        changed++;
+      }
+    } catch(e) { console.warn('Km-synchronisatie mislukt voor', v.license, e.code||e.message); }
+  }
+  if (changed > 0) { await loadVehicles(); loadVehicleStatus(); render(); }
+  return changed;
+}
+window.syncKmNow = async () => {
+  const n = await reconcileVehicleKm(true);
+  flash(n > 0 ? `Km-standen gesynchroniseerd (${n} voertuig${n>1?'en':''} bijgewerkt) ✓` : 'Km-standen waren al gelijk ✓');
+};
 
 // ── Automatisch opruimen/promoveren (admin-only achtergrondtaak) ───────────
 // Reguliere gebruikers mogen in Firestore alleen NIEUWE ritten aanmaken met
@@ -657,12 +724,20 @@ window.goWizRijden = () => {
     const v = S.vehicles.find(x => x.id === lastVid);
     const lsKm = getVehicleKm(lastVid);
     S.wiz.km = String(v?.last_km || lsKm?.km || '');
-    S.wiz.addr = localStorage.getItem('qline_last_addr_' + lastVid) || v?.last_addr || lsKm?.addr || '';
+    S.wiz.addr = v?.last_addr || localStorage.getItem('qline_last_addr_' + lastVid) || lsKm?.addr || '';
   }
   go('rijden');
   // Actuele status ophalen zodat "in gebruik" badges niet verouderd zijn
   // (voorkomt dat twee monteurs tegelijk dezelfde, net vertrokken auto kiezen)
-  loadTrips().then(() => { loadAR(); render(); }).catch(()=>{});
+  Promise.all([loadVehicles(), loadTrips()]).then(() => {
+    loadVehicleStatus(); loadAR();
+    // Al een auto gekozen, maar nog niet handmatig gecorrigeerd? Neem dan de verse stand over.
+    if (S.wiz && S.wiz.step === 1 && S.wiz.vid && !S.wiz._kmCorrect) {
+      const fv = S.vehicles.find(x => x.id === S.wiz.vid);
+      if (fv?.last_km) { S.wiz.km = String(fv.last_km); if (fv.last_addr) S.wiz.addr = fv.last_addr; }
+    }
+    render();
+  }).catch(()=>{});
 };
 
 function renderWizRijden() {
@@ -1102,7 +1177,7 @@ window.wizSelectVehicle = (vid) => {
   const v = S.vehicles.find(x => x.id === vid);
   const lsKm = getVehicleKm(vid);
   S.wiz.km = String(v?.last_km || lsKm?.km || '');
-  S.wiz.addr = localStorage.getItem('qline_last_addr_' + vid) || v?.last_addr || lsKm?.addr || '';
+  S.wiz.addr = v?.last_addr || localStorage.getItem('qline_last_addr_' + vid) || lsKm?.addr || '';
   render();
 };
 
@@ -1409,8 +1484,10 @@ window.wizStopRit = async () => {
     if (v) { v.last_km=endKm; v.last_addr=addr; v.last_date=ride.trip_date; }
     setVehicleKm(vid, endKm, addr);
     localStorage.setItem('qline_last_addr_' + vid, addr);
+    syncVehicleKm(vid, endKm, addr, ride.trip_date); // gedeelde stand, op de achtergrond
     await saveAR_stop(vid);
     await loadTrips();
+    loadVehicleStatus();
     S.saving = false;
     flash('Rit opgeslagen ✓ — '+(endKm-ride.start_km)+' km gereden');
     go('trips');
@@ -1731,6 +1808,7 @@ window.saveManualTrip = async () => {
     });
     setVehicleKm(f.vid, kmE, f.to);
     if (v) { v.last_km = kmE; v.last_addr = f.to; }
+    syncVehicleKm(f.vid, kmE, f.to, f.date || '');
     S._mForm = null; // reset formulier
     await loadTrips();
     flash('Rit opgeslagen ✓ — ' + (kmE-kmS) + ' km');
@@ -1747,6 +1825,7 @@ function renderAdminActive() {
   <div style="padding:14px 16px">
     <p style="font-size:13px;color:#666;margin-bottom:10px">Zoekt en verwijdert oude 'onderweg'-placeholders (0 km) die zijn achtergebleven naast een al voltooide rit. Draait ook automatisch elke keer dat je inlogt.</p>
     <button class="btn bp bsm" onclick="cleanupSupersededTrips().then(()=>flash('Opruiming uitgevoerd'))">Opruimen nu</button>
+    <button class="btn bs bsm" style="margin-left:6px" onclick="syncKmNow()">Km-standen synchroniseren</button>
   </div>
 </div>
 <div class="card" style="margin-bottom:16px">
@@ -1993,6 +2072,8 @@ window.saveVehicleKm = async (vid) => {
   if (!v) return;
   setVehicleKm(vid, km, v.last_addr || '');
   v.last_km = km;
+  // Admin-correctie is autoritatief: ook het gedeelde voertuig-document aanpassen (mag omlaag)
+  try { await updateDoc(doc(db,'vehicles', vid), { last_km: km, last_addr: v.last_addr||'', last_date: new Date().toISOString().slice(0,10) }); v._docKm = km; } catch(e) { console.warn('Km corrigeren op voertuig mislukt:', e.code||e.message); }
   // Update ook de laatste rit in Firebase
   const vTrips = S.trips.filter(t => t.vehicle_id === vid && t.odometer_end)
     .sort((a,b) => (b.trip_date||'').localeCompare(a.trip_date||''));
