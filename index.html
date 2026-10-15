@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '3.3.0';
+const APP_VERSION = '3.4.0';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -378,7 +378,10 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && is
 // altijd binnen enkele minuten, ongeacht hoe lang de app al open staat.
 async function refreshRideData() {
   if (!S.user) return;
-  try { await loadVehicles(); await loadTrips(); await loadAR(); loadVehicleStatus(); render(); } catch(e) { /* volgende poging probeert opnieuw */ }
+  const nu = Date.now();
+  if (S._lastRefresh && nu - S._lastRefresh < 60000) return; // niet vaker dan 1x per minuut (focus + zichtbaar vuren vaak tegelijk)
+  S._lastRefresh = nu;
+  try { await loadVehicles(); await loadTrips('recent'); await loadAR(); loadVehicleStatus(); render(); } catch(e) { /* volgende poging probeert opnieuw */ }
 }
 setInterval(refreshRideData, 3 * 60 * 1000); // elke 3 minuten
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshRideData(); });
@@ -407,12 +410,31 @@ onAuthStateChanged(auth, async u => {
 });
 
 // ── Data ──────────────────────────────────────────────────────────────────────
-async function loadTrips() {
-  let q = isAdmin()
-    ? query(collection(db,'trips'), orderBy('trip_date','desc'), limit(200))
-    : query(collection(db,'trips'), where('user_id','==',S.user.uid), orderBy('trip_date','desc'), limit(100));
+// mode 'full'   : alle ritten (admin tot 3000, medewerker eigen ritten tot 1000).
+//                 Wordt gebruikt bij inloggen en na elke actie.
+// mode 'recent' : alleen de laatste 14 dagen opnieuw ophalen en samenvoegen met
+//                 de al geladen oudere ritten. Wordt gebruikt voor de periodieke
+//                 verversing, zodat dat weinig Firestore-reads kost.
+async function loadTrips(mode='full') {
+  const admin = isAdmin();
+  if (mode === 'recent' && S._tripsFull) {
+    const d = new Date(); d.setDate(d.getDate() - 14);
+    const cutoff = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    const q = admin
+      ? query(collection(db,'trips'), where('trip_date','>=',cutoff), orderBy('trip_date','desc'))
+      : query(collection(db,'trips'), where('user_id','==',S.user.uid), where('trip_date','>=',cutoff), orderBy('trip_date','desc'));
+    const snap = await getDocs(q);
+    const fresh = snap.docs.map(d => ({id:d.id,...d.data()}));
+    const older = S.trips.filter(t => (t.trip_date||'') < cutoff);
+    S.trips = [...fresh, ...older];
+    return;
+  }
+  const q = admin
+    ? query(collection(db,'trips'), orderBy('trip_date','desc'), limit(3000))
+    : query(collection(db,'trips'), where('user_id','==',S.user.uid), orderBy('trip_date','desc'), limit(1000));
   const snap = await getDocs(q);
   S.trips = snap.docs.map(d => ({id:d.id,...d.data()}));
+  S._tripsFull = true;
 }
 async function loadVehicles() {
   const snap = await getDocs(query(collection(db,'vehicles'), orderBy('license')));
