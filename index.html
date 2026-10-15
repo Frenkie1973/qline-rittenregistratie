@@ -125,7 +125,7 @@ textarea{resize:vertical;min-height:70px}
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js';
-import { getFirestore, collection, addDoc, getDocs, getDoc, doc, updateDoc, setDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
+import { getFirestore, collection, addDoc, getDocs, getDoc, doc, updateDoc, setDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp, runTransaction, writeBatch } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
 
 const FB = {
   apiKey: "AIzaSyAk4Xus-k0ZTCIMluh9QMslsg-I21uMoDQ",
@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '3.5.1';
+const APP_VERSION = '3.6.0';
 // Voertuig-vergrendeling (wie rijdt er nu met de auto) vervalt na 6 uur, of direct
 // als er geen tijdstip bij staat. Zo kan een vastgelopen vergrendeling (bv. een
 // rit die later is verwijderd) nooit meer iemand blokkeren. Wordt zowel in de
@@ -409,6 +409,13 @@ onAuthStateChanged(auth, async u => {
         await setDoc(doc(db,'users',u.uid),{email:u.email,full_name:u.email,role:'medewerker',created_at:serverTimestamp()});
         S.profile = {email:u.email,full_name:u.email,role:'medewerker'};
       } else { S.profile = snap.data(); }
+      if (S.profile.active === false) {
+        // Uitgeschakeld door de beheerder: direct weer uitloggen
+        S.blockedMsg = 'Dit account is uitgeschakeld. Neem contact op met de beheerder.';
+        S.user = null; S.profile = null; S.loading = false; render();
+        await signOut(auth);
+        return;
+      }
       await loadVehicles();
       await loadTrips();
       await loadAR();
@@ -603,7 +610,9 @@ function render() {
   window.S = S;
   if (!S.updateAvailable) document.body.style.paddingTop = '0';
   if (S.loading) { R.innerHTML = updateBanner() + '<div class="spin"><div class="sr"></div></div>'; return; }
-  if (!S.user)   { R.innerHTML = updateBanner() + renderLogin(); bindLogin(); return; }
+  if (!S.user)   { R.innerHTML = updateBanner() + renderLogin(); bindLogin();
+    if (S.blockedMsg) { const le = document.getElementById('lerr'); if (le) le.innerHTML = '<div class="alert ae" style="margin-bottom:12px">' + esc(S.blockedMsg) + '</div>'; }
+    return; }
   R.innerHTML = updateBanner() + renderShell();
   bindEvents();
 }
@@ -1716,7 +1725,7 @@ function renderAdminManual() {
   };
   const f = S._mForm;
   const vopts = S.vehicles.map(v => `<option value="${v.id}" ${f.vid===v.id?'selected':''}>${esc(v.license)} · ${esc(v.brand||'')}</option>`).join('');
-  const uopts = S.users.map(u => { const val=u.id+'|'+(u.full_name||u.email); return `<option value="${esc(val)}" ${f.uid===val?'selected':''}>${esc(u.full_name||u.email)}</option>`; }).join('');
+  const uopts = S.users.filter(u => u.active !== false).map(u => { const val=u.id+'|'+(u.full_name||u.email); return `<option value="${esc(val)}" ${f.uid===val?'selected':''}>${esc(u.full_name||u.email)}</option>`; }).join('');
   return `
 <div class="card">
   <div class="ch">Rit handmatig invoeren</div>
@@ -1955,6 +1964,47 @@ function renderAdminVehicles() {
 }
 
 function renderAdminUsers() {
+  const actief = S.users.filter(u => u.active !== false);
+  const uit = S.users.filter(u => u.active === false);
+  const rij = u => {
+    const ikzelf = S.user && u.id === S.user.uid;
+    const bewerken = S._editUser === u.id;
+    const verwijderen = S._delUser === u.id;
+    return `
+  <div style="padding:12px 16px;border-bottom:1px solid #f0f0f0">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <div style="min-width:0"><span style="font-weight:500">${esc(u.full_name||u.email)}</span>${ikzelf?' <span style="font-size:11px;color:#888">(jij)</span>':''}<br>
+      <span style="font-size:12px;color:#888">${esc(u.email||'')}</span></div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <select onchange="changeRole('${u.id}',this.value)" style="font-size:13px;padding:8px;border-radius:6px;border:1px solid #ddd">
+          <option value="medewerker" ${u.role==='medewerker'?'selected':''}>Medewerker</option>
+          <option value="admin" ${u.role==='admin'?'selected':''}>Admin</option>
+        </select>
+        <button class="btn bs bsm" title="Naam aanpassen" onclick="editUserName('${u.id}')" style="padding:8px 12px">✏️</button>
+        <button class="btn bsm" title="Verwijderen" onclick="askDeleteUser('${u.id}')" style="padding:8px 12px;background:#888;color:#fff;border:none;border-radius:6px;cursor:pointer">🗑</button>
+      </div>
+    </div>
+    ${bewerken?`
+    <div style="margin-top:10px;padding:12px;background:#f8f8f8;border-radius:8px">
+      <input type="text" id="edit-user-inp" value="${esc(u.full_name||u.email)}" placeholder="Volledige naam" style="font-size:15px;width:100%;margin-bottom:8px"/>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#333;margin-bottom:10px">
+        <input type="checkbox" id="edit-user-trips" checked/> Ook de naam in bestaande ritten aanpassen
+      </label>
+      <div style="display:flex;gap:8px">
+        <button class="btn bp bsm" style="flex:1;padding:12px" onclick="saveUserName('${u.id}')">Opslaan</button>
+        <button class="btn bs bsm" style="flex:1;padding:12px" onclick="editUserName('${u.id}')">Annuleren</button>
+      </div>
+    </div>`:''}
+    ${verwijderen?`
+    <div style="margin-top:10px;padding:12px;background:#fdf2f2;border-radius:8px">
+      <p style="font-size:13px;color:#721c24;margin-bottom:10px"><strong>${esc(u.full_name||u.email)}</strong> kan daarna niet meer inloggen. De ritten blijven bewaard. Je kunt de gebruiker later herstellen.</p>
+      <div style="display:flex;gap:8px">
+        <button class="btn bd bsm" style="flex:1;padding:12px" onclick="deleteUser('${u.id}')">Ja, verwijderen</button>
+        <button class="btn bs bsm" style="flex:1;padding:12px" onclick="askDeleteUser('${u.id}')">Nee</button>
+      </div>
+    </div>`:''}
+  </div>`;
+  };
   return `
 <div class="card">
   <div class="ch">Nieuwe gebruiker</div>
@@ -1966,17 +2016,19 @@ function renderAdminUsers() {
   </div>
 </div>
 <div class="card">
-  <div class="ch">Gebruikers (${S.users.length})</div>
-  ${S.users.map(u=>`
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #f0f0f0">
-    <div><span style="font-weight:500">${esc(u.full_name||u.email)}</span><br>
-    <span style="font-size:12px;color:#888">${esc(u.email||'')}</span></div>
-    <select onchange="changeRole('${u.id}',this.value)" style="font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid #ddd">
-      <option value="medewerker" ${u.role==='medewerker'?'selected':''}>Medewerker</option>
-      <option value="admin" ${u.role==='admin'?'selected':''}>Admin</option>
-    </select>
+  <div class="ch">Gebruikers (${actief.length})</div>
+  ${actief.map(rij).join('')}
+</div>
+${uit.length?`
+<div class="card">
+  <div class="ch">Uitgeschakeld (${uit.length})</div>
+  ${uit.map(u=>`
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 16px;border-bottom:1px solid #f0f0f0">
+    <div style="min-width:0"><span style="font-weight:500;color:#888">${esc(u.full_name||u.email)}</span><br>
+    <span style="font-size:12px;color:#aaa">${esc(u.email||'')}</span></div>
+    <button class="btn bs bsm" style="padding:10px 14px" onclick="restoreUser('${u.id}')">Herstellen</button>
   </div>`).join('')}
-</div>`;
+</div>`:''}`;
 }
 
 function renderAdminApprove() {
@@ -2030,6 +2082,7 @@ function bindLogin() {
     const em = document.getElementById('lem').value;
     const pw = document.getElementById('lpw').value;
     document.getElementById('lerr').innerHTML = '';
+    S.blockedMsg = null;
     btn.textContent = 'Bezig…'; btn.disabled = true;
     try {
       await signInWithEmailAndPassword(auth, em, pw);
@@ -2141,6 +2194,83 @@ window.deleteTrip = async (id) => {
   S.trips = S.trips.filter(t => t.id !== id);
   if (S.detailTrip?.id === id) { S.detailTrip=null; go('trips'); return; }
   flash('Rit verwijderd'); render();
+};
+
+window.editUserName = (id) => {
+  S._editUser = S._editUser === id ? null : id;
+  S._delUser = null;
+  render();
+  if (S._editUser) setTimeout(() => document.getElementById('edit-user-inp')?.focus(), 50);
+};
+
+window.askDeleteUser = (id) => {
+  S._delUser = S._delUser === id ? null : id;
+  S._editUser = null;
+  render();
+};
+
+// Naam aanpassen: het profiel, en (optioneel) de naam in bestaande ritten.
+// Ritten worden alleen aangepast waar de oude naam EXACT klopt, zodat ritten die
+// onder een ander account met een andere naam zijn ingevoerd niet worden overschreven.
+window.saveUserName = async (id) => {
+  const u = S.users.find(x => x.id === id);
+  if (!u) return;
+  const nieuw = document.getElementById('edit-user-inp')?.value.trim();
+  const ookRitten = document.getElementById('edit-user-trips')?.checked;
+  if (!nieuw) { flash('Vul een naam in','error'); return; }
+  const oud = u.full_name || u.email;
+  if (nieuw === oud) { S._editUser = null; render(); return; }
+  try {
+    await withTimeout(updateDoc(doc(db,'users',id), { full_name: nieuw }), 'Naam opslaan', 20000);
+    let n = 0;
+    if (ookRitten) {
+      const snap = await withTimeout(getDocs(query(collection(db,'trips'), where('user_name','==',oud))), 'Ritten zoeken', 30000);
+      for (let i = 0; i < snap.docs.length; i += 400) {
+        const b = writeBatch(db);
+        const deel = snap.docs.slice(i, i + 400);
+        deel.forEach(d => b.update(d.ref, { user_name: nieuw }));
+        await withTimeout(b.commit(), 'Ritten bijwerken', 30000);
+        n += deel.length;
+      }
+    }
+    S.users = S.users.map(x => x.id === id ? {...x, full_name: nieuw} : x);
+    S.trips = S.trips.map(t => t.user_name === oud && ookRitten ? {...t, user_name: nieuw} : t);
+    Object.values(S.activeRides).forEach(r => { if (ookRitten && r.user_name === oud) r.user_name = nieuw; });
+    if (S.user && id === S.user.uid && S.profile) S.profile.full_name = nieuw;
+    S._editUser = null;
+    flash('Naam aangepast ✓' + (ookRitten ? ` (${n} ritten bijgewerkt)` : ''));
+  } catch(e) {
+    flash('Fout bij opslaan: ' + [e.code, e.message].filter(Boolean).join(' | '), 'error');
+  }
+};
+
+// Verwijderen = uitschakelen. De gebruiker kan niet meer inloggen in de app, de ritten
+// blijven bewaard (nodig voor de administratie). Echt wissen kan niet: bij inloggen
+// maakt de app anders weer automatisch een nieuw profiel aan.
+window.deleteUser = async (id) => {
+  const u = S.users.find(x => x.id === id);
+  if (!u) return;
+  if (S.user && id === S.user.uid) { flash('Je kunt je eigen account niet verwijderen','error'); S._delUser = null; render(); return; }
+  const adminsOver = S.users.filter(x => x.role === 'admin' && x.active !== false && x.id !== id).length;
+  if (u.role === 'admin' && adminsOver < 1) { flash('Dit is de enige admin, die kan niet worden verwijderd','error'); S._delUser = null; render(); return; }
+  try {
+    await withTimeout(updateDoc(doc(db,'users',id), { active: false, deactivated_at: serverTimestamp() }), 'Gebruiker verwijderen', 20000);
+    S.users = S.users.map(x => x.id === id ? {...x, active: false} : x);
+    S._delUser = null;
+    flash('Gebruiker verwijderd ✓ (ritten blijven bewaard)');
+  } catch(e) {
+    flash('Fout bij verwijderen: ' + [e.code, e.message].filter(Boolean).join(' | '), 'error');
+  }
+};
+
+window.restoreUser = async (id) => {
+  try {
+    await withTimeout(updateDoc(doc(db,'users',id), { active: true }), 'Gebruiker herstellen', 20000);
+    S.users = S.users.map(x => x.id === id ? {...x, active: true} : x);
+    flash('Gebruiker hersteld ✓');
+  } catch(e) {
+    flash('Fout bij herstellen: ' + [e.code, e.message].filter(Boolean).join(' | '), 'error');
+  }
 };
 
 window.changeRole = async (id, role) => {
