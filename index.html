@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '3.6.0';
+const APP_VERSION = '3.6.1';
 // Voertuig-vergrendeling (wie rijdt er nu met de auto) vervalt na 6 uur, of direct
 // als er geen tijdstip bij staat. Zo kan een vastgelopen vergrendeling (bv. een
 // rit die later is verwijderd) nooit meer iemand blokkeren. Wordt zowel in de
@@ -285,7 +285,9 @@ async function saveAR_start(vid, ride) {
   // overschrijft een herhaalde poging altijd hetzelfde record — er kan dus
   // nooit een dubbele rit ontstaan, ook niet bij een dubbele klik of een
   // vertraagde herhaling.
-  const tripId = `${vid}_${ride.trip_date}_${(ride.dep_time||'').replace(/:/g,'')}`;
+  // ride.sid is per start-sessie (wizard) uniek: een herhaalpoging gebruikt hetzelfde ID (geen dubbele rit),
+  // maar een nieuwe rit in dezelfde minuut op dezelfde auto botst niet meer met de vorige.
+  const tripId = `${vid}_${ride.trip_date}_${(ride.dep_time||'').replace(/:/g,'')}${ride.sid ? '_' + ride.sid : ''}`;
   let tripRef = doc(db,'trips', tripId);
   const vehicleRef = doc(db,'vehicles', vid);
   // ── Atomaire vergrendeling (met veilige terugval) ────────────────────────────
@@ -311,7 +313,13 @@ async function saveAR_start(vid, ride) {
     if (e?.message?.includes('is zojuist al gestart door')) throw e; // echte dubbele-boeking-fout: wel tonen
     // Vergrendeling mislukt om andere reden (bv. rechten) — rit alsnog gewoon starten, zonder vergrendeling
     console.warn('Vergrendeling mislukt, rit wordt zonder vergrendeling gestart:', e.message);
-    await withTimeout(setDoc(tripRef, tripData), 'Rit starten (zonder vergrendeling)', 25000);
+    // Bestaat deze rit al van een eerdere (trage) poging van dezelfde gebruiker? Dan is de rit gewoon gestart.
+    let bestaatAl = false;
+    try {
+      const ex = await withTimeout(getDoc(tripRef), 'Rit controleren', 15000);
+      bestaatAl = ex.exists() && ex.data().user_id === ride.user_id;
+    } catch(_) {}
+    if (!bestaatAl) await withTimeout(setDoc(tripRef, tripData), 'Rit starten (zonder vergrendeling)', 25000);
   }
   ride._docId = tripRef.id;
   S.activeRides[vid] = ride;
@@ -572,22 +580,20 @@ async function cleanupSupersededTrips() {
     }
     // Stap 2: oude placeholders opruimen
     const idsToClean = new Set();
-    // Methode 1: directe koppeling via superseded_id
-    S.trips.filter(t => t.superseded_id).forEach(t => idsToClean.add(t.superseded_id));
-    // Methode 2: oudere weeskinderen zónder superseded_id — herkend door een
-    // 'onderweg'-rit (zonder arrival_reported) die exact matcht met een al
-    // voltooide rit op voertuig + gebruiker + datum + vertrektijd.
-    const onderweg = S.trips.filter(t => t.status === 'onderweg' && !t.arrival_reported);
-    const voltooid = S.trips.filter(t => t.status !== 'onderweg' || t.arrival_reported);
-    for (const o of onderweg) {
-      const match = voltooid.find(v =>
-        v.vehicle_id === o.vehicle_id &&
-        v.user_id === o.user_id &&
-        v.trip_date === o.trip_date &&
-        v.departure_time === o.departure_time
-      );
-      if (match) idsToClean.add(o.id);
-    }
+    // Alleen een 'onderweg'-placeholder opruimen die bij een voltooide rit hoort (superseded_id) én
+    // ouder is dan die voltooide rit. Een nieuwere rit met hetzelfde ID/dezelfde minuut is een lopende
+    // rit en blijft staan. (De oude 'matching op voertuig+gebruiker+datum+tijd' is vervallen: die kon
+    // een lopende rit voor een restant aanzien.)
+    const perId = {};
+    S.trips.forEach(t => { perId[t.id] = t; });
+    S.trips.filter(t => t.superseded_id).forEach(t => {
+      const p = perId[t.superseded_id];
+      if (!p || p.arrival_reported || p.status !== 'onderweg') return;
+      const pm = p.created_at && p.created_at.toMillis ? p.created_at.toMillis() : null;
+      const km = t.created_at && t.created_at.toMillis ? t.created_at.toMillis() : null;
+      if (pm !== null && km !== null && pm > km) return;
+      idsToClean.add(p.id);
+    });
     for (const id of idsToClean) {
       try { await deleteDoc(doc(db,'trips', id)); changed++; } catch(e) { /* al weg of geen rechten — negeren */ }
     }
@@ -1456,6 +1462,7 @@ window.wizStartRit = async () => {
     // record te overschrijven (idempotentie werkt alleen als dep_time gelijk
     // blijft tussen pogingen).
     if (!S.wiz.dep_time) { S.wiz.dep_time = nowTime(); S.wiz.trip_date = nowDate(); }
+    if (!S.wiz.sid) S.wiz.sid = Math.random().toString(36).slice(2, 8);
     const ride = {
       vehicle_id: vid,
       start_km: parseInt(km),
@@ -1463,6 +1470,7 @@ window.wizStartRit = async () => {
       purpose, trip_type: tripType,
       dep_time: S.wiz.dep_time,
       trip_date: S.wiz.trip_date,
+      sid: S.wiz.sid,
       user_id: S.user.uid,
       user_name: S.profile?.full_name||S.user.email,
       created_at: serverTimestamp(),
