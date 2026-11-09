@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '3.6.1';
+const APP_VERSION = '3.7.0';
 // Voertuig-vergrendeling (wie rijdt er nu met de auto) vervalt na 6 uur, of direct
 // als er geen tijdstip bij staat. Zo kan een vastgelopen vergrendeling (bv. een
 // rit die later is verwijderd) nooit meer iemand blokkeren. Wordt zowel in de
@@ -436,6 +436,22 @@ onAuthStateChanged(auth, async u => {
 });
 
 // ── Data ──────────────────────────────────────────────────────────────────────
+// Een 'onderweg'-placeholder (0 km) waar al een afgeronde rit voor bestaat, hoort niet meer in de lijsten.
+// Alleen admin kan zo'n restant echt verwijderen (bij inloggen/elke 5 min), dus tot die tijd verbergen we
+// het voor iedereen. Is de placeholder nieuwer dan de afgeronde rit, dan is het een lopende rit en blijft hij staan.
+function verbergVervangen(lijst) {
+  const klaarTijd = {};
+  lijst.forEach(t => {
+    if (t.superseded_id) klaarTijd[t.superseded_id] = (t.created_at && t.created_at.toMillis) ? t.created_at.toMillis() : null;
+  });
+  return lijst.filter(t => {
+    if (t.status !== 'onderweg' || t.arrival_reported || !(t.id in klaarTijd)) return true;
+    const pm = (t.created_at && t.created_at.toMillis) ? t.created_at.toMillis() : null;
+    const km = klaarTijd[t.id];
+    return pm !== null && km !== null && pm > km;
+  });
+}
+
 // mode 'full'   : alle ritten (admin tot 3000, medewerker eigen ritten tot 1000).
 //                 Wordt gebruikt bij inloggen en na elke actie.
 // mode 'recent' : alleen de laatste 14 dagen opnieuw ophalen en samenvoegen met
@@ -451,8 +467,9 @@ async function loadTrips(mode='full') {
       : query(collection(db,'trips'), where('user_id','==',S.user.uid), where('trip_date','>=',cutoff), orderBy('trip_date','desc'));
     const snap = await getDocs(q);
     const fresh = snap.docs.map(d => ({id:d.id,...d.data()}));
-    const older = S.trips.filter(t => (t.trip_date||'') < cutoff);
-    S.trips = [...fresh, ...older];
+    const older = (S._rawTrips || S.trips).filter(t => (t.trip_date||'') < cutoff);
+    S._rawTrips = [...fresh, ...older];
+    S.trips = verbergVervangen(S._rawTrips);
     return;
   }
   let q;
@@ -468,7 +485,8 @@ async function loadTrips(mode='full') {
       : query(collection(db,'trips'), where('user_id','==',S.user.uid), orderBy('trip_date','desc'), limit(1000));
   }
   const snap = await getDocs(q);
-  S.trips = snap.docs.map(d => ({id:d.id,...d.data()}));
+  S._rawTrips = snap.docs.map(d => ({id:d.id,...d.data()}));
+  S.trips = verbergVervangen(S._rawTrips);
   S._tripsFull = true;
 }
 async function loadVehicles() {
@@ -571,7 +589,8 @@ async function cleanupSupersededTrips() {
   try {
     let changed = 0;
     // Stap 1: gerapporteerde aankomsten promoveren naar status 'open'
-    const pending = S.trips.filter(t => t.arrival_reported && t.status === 'onderweg');
+    const bron = S._rawTrips || S.trips; // ruwe lijst: ook de voor het scherm verborgen placeholders
+    const pending = bron.filter(t => t.arrival_reported && t.status === 'onderweg');
     for (const t of pending) {
       try {
         await updateDoc(doc(db,'trips', t.id), { status: 'open' });
@@ -585,8 +604,8 @@ async function cleanupSupersededTrips() {
     // rit en blijft staan. (De oude 'matching op voertuig+gebruiker+datum+tijd' is vervallen: die kon
     // een lopende rit voor een restant aanzien.)
     const perId = {};
-    S.trips.forEach(t => { perId[t.id] = t; });
-    S.trips.filter(t => t.superseded_id).forEach(t => {
+    bron.forEach(t => { perId[t.id] = t; });
+    bron.filter(t => t.superseded_id).forEach(t => {
       const p = perId[t.superseded_id];
       if (!p || p.arrival_reported || p.status !== 'onderweg') return;
       const pm = p.created_at && p.created_at.toMillis ? p.created_at.toMillis() : null;
