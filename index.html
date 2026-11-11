@@ -145,13 +145,51 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '3.7.0';
+const APP_VERSION = '3.8.0';
 // Voertuig-vergrendeling (wie rijdt er nu met de auto) vervalt na 6 uur, of direct
 // als er geen tijdstip bij staat. Zo kan een vastgelopen vergrendeling (bv. een
 // rit die later is verwijderd) nooit meer iemand blokkeren. Wordt zowel in de
 // keuzelijst als bij het echt starten van een rit gebruikt (eerder alleen in de lijst).
 const LOCK_VERLOOP_MS = 6 * 60 * 60 * 1000;
 const lockIsStale = (since) => !since || !since.toMillis || (Date.now() - since.toMillis()) > LOCK_VERLOOP_MS;
+
+// ── Melding bij een niet-afgeronde rit ───────────────────────────────────────
+// Vergeet iemand de aankomst in te vullen, dan zag de volgende bestuurder van die auto dat niet
+// en ging het mis bij 'Ga rijden'. Deze functie bepaalt per auto of er een rit open staat.
+const p2 = n => String(n).padStart(2, '0');
+const fmtDagTijd = (datum, tijd) => { // '2026-11-09','08:51' -> '9-11 om 08:51'
+  const m = String(datum||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return (m ? `${+m[3]}-${+m[2]}` : (datum||'?')) + (tijd ? ` om ${tijd}` : '');
+};
+const rijUren = (datum, tijd) => {
+  const t = new Date(`${datum}T${tijd||'00:00'}:00`).getTime();
+  return isNaN(t) ? 0 : (Date.now() - t) / 3600000;
+};
+// soort: 'eigen' (jouw eigen rit staat nog open), 'bezig' (iemand rijdt nu, <6 uur), 'vergeten' (>=6 uur geleden, geen aankomst)
+function ritInfoVoorVoertuig(v) {
+  const mijnUid = S.user && S.user.uid;
+  const r = S.activeRides[v.id];
+  if (r && r.user_id === mijnUid) return { soort: 'eigen', naam: r.user_name, wanneer: fmtDagTijd(r.trip_date, r.dep_time), uren: rijUren(r.trip_date, r.dep_time) };
+  if (v.active_trip_id) {
+    const sinds = v.active_since && v.active_since.toDate ? v.active_since.toDate() : null;
+    const wanneer = sinds ? fmtDagTijd(`${sinds.getFullYear()}-${p2(sinds.getMonth()+1)}-${p2(sinds.getDate())}`, `${p2(sinds.getHours())}:${p2(sinds.getMinutes())}`) : '';
+    if (!lockIsStale(v.active_since)) return { soort: 'bezig', naam: v.active_by || 'iemand anders', wanneer };
+    const lockDatum = sinds ? `${sinds.getFullYear()}-${p2(sinds.getMonth()+1)}-${p2(sinds.getDate())}` : '';
+    if (v._docDate && lockDatum && v._docDate > lockDatum) return null; // daarna is er al een rit afgerond: restant van de vergrendeling
+    return { soort: 'vergeten', naam: v.active_by || 'iemand', wanneer };
+  }
+  if (r) { // admin ziet ook de ritten van anderen
+    const u = rijUren(r.trip_date, r.dep_time);
+    return { soort: u < 6 ? 'bezig' : 'vergeten', naam: r.user_name, wanneer: fmtDagTijd(r.trip_date, r.dep_time), uren: u };
+  }
+  return null;
+}
+const vergetenNotitie = (v) => {
+  const i = v && ritInfoVoorVoertuig(v);
+  return (i && i.soort === 'vergeten')
+    ? `<div style="background:#fff8e1;border:1px solid #f0c36d;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:14px;color:#7a5200">⚠️ <strong>Let op:</strong> ${esc(i.naam)} is op ${esc(i.wanneer)} vertrokken en heeft de aankomst mogelijk niet ingevuld. De kilometerstand hieronder kan daardoor afwijken: controleer de teller.</div>`
+    : '';
+};
 // Telefoon? Dan laden we minder ritten (sneller). Computers en tablets laden alles.
 const IS_PHONE = /Android.*Mobile|iPhone|iPod/i.test(navigator.userAgent) ||
   (matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600);
@@ -691,6 +729,9 @@ function renderDash() {
   const pri = mt.filter(t=>t.trip_type==='Privé').reduce((s,t)=>s+(t.km_total||0),0);
   const open = mt.filter(t=>displayStatus(t)==='open').length;
   const actCnt = Object.keys(S.activeRides).length;
+  // Admin ziet ook open ritten die achter een andere rit op dezelfde auto schuilgaan
+  const extraOpen = isAdmin() ? S.trips.filter(t => t.status === 'onderweg' && !t.arrival_reported &&
+    !(S.activeRides[t.vehicle_id] && S.activeRides[t.vehicle_id]._docId === t.id)) : [];
   const pvmap = {};
   mt.forEach(t=>{ const k=t.vehicle_license||'?'; pvmap[k]=(pvmap[k]||0)+(t.km_total||0); });
   const pvArr = Object.entries(pvmap).sort((a,b)=>b[1]-a[1]).slice(0,5);
@@ -712,17 +753,24 @@ function renderDash() {
   <div class="sc"><div class="sl">Privé</div><div class="sv" style="color:#4a1a6e">${pri}</div><div class="ss">km</div></div>
   <div class="sc"><div class="sl">Open</div><div class="sv" style="color:${open>0?'#856404':'#166534'}">${open}</div><div class="ss">te controleren</div></div>
 </div>
-${actCnt>0?`
+${(actCnt>0||extraOpen.length>0)?`
 <div class="card" style="border-left:4px solid var(--red)">
-  <div class="ch" style="background:#fdf2f2;color:#721c24">🚗 Onderweg (${actCnt})</div>
+  <div class="ch" style="background:#fdf2f2;color:#721c24">🚗 Onderweg (${actCnt+extraOpen.length})</div>
   ${Object.entries(S.activeRides).map(([vid,ride])=>{
     const v=S.vehicles.find(x=>x.id===vid);
+    const uren = rijUren(ride.trip_date, ride.dep_time);
+    const waarsch = uren >= 4 ? `<p style="font-size:13px;color:#c0392b;font-weight:600;margin-top:3px">⚠️ ${uren >= 24 ? 'Sinds '+esc(fmtDagTijd(ride.trip_date, ride.dep_time)) : 'Al '+Math.round(uren)+' uur'} onderweg: ${ride.user_id===(S.user&&S.user.uid)?'vergeten':'is de aankomst vergeten'} af te ronden?</p>` : '';
     return `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #fdf2f2">
       <div><p style="font-weight:600">${esc(v?.license||'?')} · ${esc(ride.user_name||'')}</p>
-      <p style="font-size:12px;color:#888">Van: ${esc(ride.start_addr||'?')} · ${esc(ride.dep_time||'')} · ${ride.start_km} km</p></div>
+      <p style="font-size:12px;color:#888">Van: ${esc(ride.start_addr||'?')} · ${esc(ride.dep_time||'')} · ${ride.start_km} km</p>${waarsch}</div>
       <button class="btn bp bsm" onclick="goWizAankomst()">📍 Aankomst</button>
     </div>`;
   }).join('')}
+  ${extraOpen.map(t=>`<div style="padding:12px 16px;border-bottom:1px solid #fdf2f2">
+      <p style="font-weight:600">${esc(t.vehicle_license||'?')} · ${esc(t.user_name||'')}</p>
+      <p style="font-size:12px;color:#888">Van: ${esc(t.departure_address||'?')} · ${esc(fmtDagTijd(t.trip_date, t.departure_time))} · ${t.odometer_start} km</p>
+      <p style="font-size:13px;color:#c0392b;font-weight:600;margin-top:3px">⚠️ Aankomst niet ingevuld. Laat ${esc(t.user_name||'de gebruiker')} afronden, of verwijder deze rit bij Ritten (🗑).</p>
+    </div>`).join('')}
 </div>`:''}
 ${isAdmin()&&openList.length>0?`
 <div class="card" style="border-left:3px solid #fbbf24">
@@ -846,7 +894,8 @@ function renderWizRijden() {
       // onjuist beeld. Een vergrendeling die langer dan 6 uur oud is wordt
       // als vastgelopen beschouwd en telt niet meer mee (zelfherstel, zodat
       // niemand handmatig "Reset alles" hoeft te gebruiken bij een hangende rit).
-      const inUse = !!v.active_trip_id && !lockIsStale(v.active_since);
+      const info = ritInfoVoorVoertuig(v);
+      const inUse = !!info && (info.soort === 'eigen' || info.soort === 'bezig');
       const sel = S.wiz.vid === v.id;
       const km = v.last_km ? v.last_km + ' km' : 'geen stand bekend';
       return `<div class="wiz-vehicle-card ${sel?'selected':''} ${inUse?'inuse':''}"
@@ -854,7 +903,10 @@ function renderWizRijden() {
         <div style="flex:1">
           <div style="font-size:18px;font-weight:700">${esc(v.license)}</div>
           <div style="font-size:13px;color:#888;margin-top:2px">${esc(v.brand||'')} ${esc(v.model||'')} · ${km}</div>
-          ${inUse?'<div style="font-size:12px;color:#e74c3c;margin-top:3px">⚠️ Nu in gebruik</div>':''}
+          ${info && info.soort==='eigen' ? `<div style="font-size:13px;color:#e74c3c;margin-top:4px">⚠️ Jouw rit van ${esc(info.wanneer)} staat nog open. Meld eerst de aankomst.</div>
+            <button onclick="event.stopPropagation();goWizAankomst()" style="margin-top:8px;padding:10px 14px;background:#c0392b;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">📍 Aankomst melden</button>`:''}
+          ${info && info.soort==='bezig' ? `<div style="font-size:13px;color:#e74c3c;margin-top:4px">⚠️ In gebruik door ${esc(info.naam)}${info.wanneer?' (vertrek '+esc(info.wanneer)+')':''}</div>`:''}
+          ${info && info.soort==='vergeten' ? `<div style="font-size:13px;color:#b36b00;margin-top:4px">⚠️ ${esc(info.naam)} is op ${esc(info.wanneer)} vertrokken en heeft de aankomst mogelijk niet ingevuld. Vraag na wat de eindstand was.</div>`:''}
         </div>
         ${sel ? '<div style="color:var(--red);font-size:22px">✓</div>' : ''}
       </div>`;
@@ -881,6 +933,7 @@ ${cards}
       content = `
 <div class="wiz-label">Stap 2 van ${totalSteps}</div>
 <div class="wiz-question">Klopt de kilometerstand?</div>
+${vergetenNotitie(v)}
 <div style="background:#f8f8f8;border:2px solid var(--red);border-radius:14px;padding:24px;text-align:center;margin-bottom:20px">
   <div style="font-size:48px;font-weight:800;color:var(--red);letter-spacing:-1px">${esc(S.wiz.km)}</div>
   <div style="font-size:15px;color:#888;margin-top:4px">km — ${esc(v?.license||'')} · ${esc(v?.brand||'')}</div>
@@ -895,6 +948,7 @@ ${cards}
       content = `
 <div class="wiz-label">Stap 2 van ${totalSteps}</div>
 <div class="wiz-question">Wat is de huidige kilometerstand?</div>
+${vergetenNotitie(v)}
 <div class="alert aw" style="margin-bottom:16px">Eerste rit voor dit voertuig — vul de beginstand in</div>
 <div style="display:flex;gap:8px;align-items:center">
   <input class="wiz-input-big" type="number" id="wiz-km" value=""
@@ -1471,6 +1525,14 @@ window.wizStartRit = async () => {
   render();
   const { vid, km, addr, purpose, tripType } = S.wiz;
   if (!vid || !km || !purpose) { flash('Vul alle velden in','error'); S.saving=false; render(); return; }
+  { // Eigen rit op deze auto nog open? Dan eerst afronden (behalve bij een herhaalpoging van dezelfde start)
+    const open = S.activeRides[vid];
+    const zelfde = open && S.wiz.sid && String(open._docId||'').endsWith('_' + S.wiz.sid);
+    if (open && open.user_id === S.user.uid && !zelfde) {
+      flash(`Je rit van ${fmtDagTijd(open.trip_date, open.dep_time)} op deze auto staat nog open. Meld eerst de aankomst, of annuleer die rit.`, 'error');
+      S.saving = false; render(); return;
+    }
+  }
   try {
     setLastVehicle(vid);
     // Vertrektijd/-datum ÉÉN keer vastleggen voor deze wizard-sessie (niet bij
