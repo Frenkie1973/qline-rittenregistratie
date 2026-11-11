@@ -145,7 +145,7 @@ const db   = getFirestore(app);
 // werken (vooral bij "toevoegen aan beginscherm" op telefoons, die pagina's
 // hardnekkig cachen). De app checkt periodiek of er een nieuwere versie live
 // staat en toont dan een banner om te verversen.
-const APP_VERSION = '3.8.0';
+const APP_VERSION = '3.8.1';
 // Voertuig-vergrendeling (wie rijdt er nu met de auto) vervalt na 6 uur, of direct
 // als er geen tijdstip bij staat. Zo kan een vastgelopen vergrendeling (bv. een
 // rit die later is verwijderd) nooit meer iemand blokkeren. Wordt zowel in de
@@ -187,7 +187,7 @@ function ritInfoVoorVoertuig(v) {
 const vergetenNotitie = (v) => {
   const i = v && ritInfoVoorVoertuig(v);
   return (i && i.soort === 'vergeten')
-    ? `<div style="background:#fff8e1;border:1px solid #f0c36d;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:14px;color:#7a5200">⚠️ <strong>Let op:</strong> ${esc(i.naam)} is op ${esc(i.wanneer)} vertrokken en heeft de aankomst mogelijk niet ingevuld. De kilometerstand hieronder kan daardoor afwijken: controleer de teller.</div>`
+    ? `<div style="background:#fff8e1;border:1px solid #f0c36d;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:14px;color:#7a5200">⚠️ <strong>Let op:</strong> ${esc(i.naam)} is ${i.wanneer ? 'op ' + esc(i.wanneer) : 'eerder'} vertrokken en heeft de aankomst mogelijk niet ingevuld. De kilometerstand hieronder kan daardoor afwijken: controleer de teller.</div>`
     : '';
 };
 // Telefoon? Dan laden we minder ritten (sneller). Computers en tablets laden alles.
@@ -906,7 +906,7 @@ function renderWizRijden() {
           ${info && info.soort==='eigen' ? `<div style="font-size:13px;color:#e74c3c;margin-top:4px">⚠️ Jouw rit van ${esc(info.wanneer)} staat nog open. Meld eerst de aankomst.</div>
             <button onclick="event.stopPropagation();goWizAankomst()" style="margin-top:8px;padding:10px 14px;background:#c0392b;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">📍 Aankomst melden</button>`:''}
           ${info && info.soort==='bezig' ? `<div style="font-size:13px;color:#e74c3c;margin-top:4px">⚠️ In gebruik door ${esc(info.naam)}${info.wanneer?' (vertrek '+esc(info.wanneer)+')':''}</div>`:''}
-          ${info && info.soort==='vergeten' ? `<div style="font-size:13px;color:#b36b00;margin-top:4px">⚠️ ${esc(info.naam)} is op ${esc(info.wanneer)} vertrokken en heeft de aankomst mogelijk niet ingevuld. Vraag na wat de eindstand was.</div>`:''}
+          ${info && info.soort==='vergeten' ? `<div style="font-size:13px;color:#b36b00;margin-top:4px">⚠️ ${esc(info.naam)} is ${info.wanneer ? 'op ' + esc(info.wanneer) : 'eerder'} vertrokken en heeft de aankomst mogelijk niet ingevuld. Vraag na wat de eindstand was.</div>`:''}
         </div>
         ${sel ? '<div style="color:var(--red);font-size:22px">✓</div>' : ''}
       </div>`;
